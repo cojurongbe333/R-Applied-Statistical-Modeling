@@ -1,0 +1,470 @@
+---
+title: "Project 3"
+author: "Chantal Ojurongbe"
+format: html
+self-contained: true
+---
+
+#### This week you will be analyzing data from the Jackson Heart Study (JHS). You can find the data in the Week 1 module on Canvas. For full credit, you must include all code chunks and R output backing up your responses.
+```{r, echo = TRUE}
+
+
+library(fastDummies)
+library(haven)
+library(lindia)
+library(tidyverse)
+library(gsheet)
+library(DescTools)
+library(FSA)
+library(dplyr)
+library(ggplot2)
+library(car)
+library(agricolae)
+library(gmodels)
+library(dplyr)
+library(car)
+library(readr)
+library(broom)
+library(modelr)
+library(performance)
+library(GGally)
+library(emmeans)
+library(visreg)
+library(see)
+library(patchwork)
+library(caret)
+library(MASS)
+library(nnet)
+library(lmtest)
+library(brant)
+
+sas_data <- read_sas("analysis1.sas7bdat")
+
+head(sas_data)
+```
+#### 1a. Model diabetic status (*Diabetes*; 0=non-diabetic, 1=diabetic) as a function of age (*age*; years), weight (*weight*; kg), hypertension status (*HTN*; 0=normotensive, 1=hypertensive), and fasting HDL categorization (*hdl3cat*; 0=low, 1=normal, 2=high), and the interactions between (1) weight and hypertension and (2) weight and fasting HDL categorization. Remember to report the resulting model.
+
+```{r, echo = TRUE}
+dataP3 <- as_tibble(sas_data %>% dplyr::select(Diabetes,
+age, weight, HTN, hdl3cat))%>%
+  na.omit()
+
+head(dataP3)
+
+dataP3 %>% count(hdl3cat)
+
+dataP3 <- dummy_cols(dataP3, select_columns = "hdl3cat")
+colnames(dataP3)
+
+m1 <- glm(Diabetes ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2 + weight:HTN + weight:hdl3cat_1 + weight:hdl3cat_2,  data = dataP3,
+         family = "binomial")
+
+summary(m1)
+
+coefficients(m1)
+
+almost_sas <- function(aov.results) {
+  aov_residuals <- residuals(aov.results)
+  par(mfrow = c(2, 2))
+  plot(aov.results, which = 1)
+  hist(aov_residuals)
+  plot(aov.results, which = 2)
+  aov_residuals5.4 <- residuals(aov.results)
+  plot(density(aov_residuals5.4))
+  hist(aov_residuals5.4)
+}
+
+sasmodel <- aov(Diabetes ~ age, data = dataP3)
+almost_sas(sasmodel)
+
+check_model(m1)
+
+```
+ln(π/1-π) = -7.40 + 0.042age + 0.032weight + 2.12HTN - 0.60hdl3cat_1 + 0.37hdl3cat_2 - 0.012(weight*HTN) + 0.002(weight*hdl3cat_1) - 0.01(weight*hdl3cat_2)
+
+Using hdl3cat_0 as the reference. 
+
+#### 1b. Perform the appropriate hypothesis test to determine if the interaction between weight and hypertension status is significant. Test at the $\alpha=0.05$ level.
+
+```{r, echo = TRUE}
+
+full_1b <- glm(Diabetes ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2 + weight:HTN + weight:hdl3cat_1 + weight:hdl3cat_2, data = dataP3)
+
+reduced_1b <- glm(Diabetes ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2 + weight:hdl3cat_1 + weight:hdl3cat_2, data = dataP3)
+
+anova_result <- anova(reduced_1b, full_1b)
+print(anova_result)
+
+df_test <- 1
+deviance_model1 <- 309.50
+deviance_model2 <- 309.36
+
+test_statistic <- deviance_model1 - deviance_model2
+p_value <- 1 - pchisq(test_statistic, df_test)
+
+cat("Chi-squared test p-value:", p_value, "\n")
+alpha <- 0.05
+if (p_value < alpha) {
+  cat("The interaction between weight and hypertension status is significant.\n")
+} else {
+  cat("The interaction between weight and hypertension status is not significant.\n")
+}
+```
+Hypotheses
+
+H0 : β1 = . . . = βk = 0, The reduced model (Model 1) without the interaction term is as good as the full model (Model 2) with the interaction term
+H1 : at least one βi ≠ 0, The full model is significantly better than the reduced model.
+
+Test Statistic and p-Value
+df: 1 (2447 - 2446)
+p: 0.708281
+
+Rejection Region
+Reject H0 if p > α; α = 0.05. This suggests that the interaction between weight and hypertension status is not significant.
+
+#### 1c. Perform the appropriate hypothesis test to determine if the interaction between weight and fasting HDL categorization is significant. Test at the $\alpha=0.05$ level.
+
+```{r, echo = TRUE}
+
+full_1c <- glm(Diabetes ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2 + weight:HTN + weight:hdl3cat_1 + weight:hdl3cat_2, data = dataP3)
+
+reduced_1c <- glm(Diabetes ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2 + weight:HTN, data = dataP3)
+
+anova_result <- anova(reduced_1c, full_1c)
+print(anova_result)
+
+df_test <- 2
+deviance_model1 <- 310.01
+deviance_model2 <- 309.36
+
+test_statistic <- deviance_model1 - deviance_model2
+p_value <- 1 - pchisq(test_statistic, df_test)
+
+cat("Chi-squared test p-value:", p_value, "\n")
+alpha <- 0.05
+if (p_value < alpha) {
+  cat("The interaction between weight and hdl3cat is significant.\n")
+} else {
+  cat("The interaction between weight and hdl3cat is not significant.\n")
+}
+```
+Hypotheses
+
+H0 : β1 = . . . = βk = 0, The reduced model (Model 1) without the interaction terms is as good as the full model (Model 2) with the interaction terms
+H1 : at least one βi ≠ 0, The full model is significantly better than the reduced model
+
+Test Statistic and p-Value
+df: 2 (2448 - 2446)
+p: 0.7225274
+
+Rejection Region
+Reject H0 since p < α; α = 0.05. This suggests that the interaction between weight and fasting HDL categorization is not significant.
+
+#### 1d. Create the following models (i.e., plug in the following values and algebraically simplify): (1) weight of 70 kg, (2) weight of 90 kg, and (3) weight of 110 kg.  Remember to report the resulting models. 
+
+ln(π/1-π) = - 7.40 + 0.042(age) + 0.032(70) + 2.12(HTN) - 0.60(hdl3cat_1) + 0.37(hdl3cat_2) - 0.012(70*HTN) + 0.002(70*hdl3cat_1) - 0.01(70*hdl3cat_2)
+ln(π/1-π) = -5.16 + 0.042(age) + 1.28HTN - 0.46hdl3cat_1 - 0.33hdl3cat_2
+
+ln(π/1-π) = - 7.40 + 0.042age + 0.032(90) + 2.12HTN - 0.60hdl3cat_1 + 0.37hdl3cat_2 - 0.012(90HTN) + 0.002(90hdl3cat_1) - 0.01(90*hdl3cat_2)
+ln(π/1-π) = - 4.52 + 0.042age + 1.04HTN - 0.42hdl3cat_1 - 0.53hdl3cat_2
+
+ln(π/1-π) = -7.40 + 0.042age + 0.032(110) + 2.12HTN - 0.60hdl3cat_1 + 0.37hdl3cat_2 - 0.012(110HTN) + 0.002(110hdl3cat_1) - 0.01(110*hdl3cat_2)
+ln(π/1-π) = - 3.88 + 0.042age + 0.80HTN - 0.38hdl3cat_1 - 0.73hdl3cat_2
+
+#### 1e. Find the odds ratios for the models in 1d.
+
+```{r, echo = TRUE}
+coef_m1d70 <- c(-5.16, 0.042, 1.28, -0.46, -0.33)
+coef_m1d90 <- c(-4.52, 0.042, 1.04, -0.42, -0.53)
+coef_m1d110 <- c(-3.88, 0.042, 0.80, -0.38, -0.73)
+
+o_r_m1d70 <- exp(coef_m1d70)
+o_r_m1d90 <- exp(coef_m1d90)
+o_r_m1d110 <- exp(coef_m1d110)
+
+
+print(o_r_m1d70)
+
+
+print(o_r_m1d90)
+
+
+print(o_r_m1d110)
+```
+              70 kg           90 kg        110 kg
+Intercept   0.0057417      0.01088902    0.02065083
+age         1.0428945      1.04289448    1.04289448
+HTN         3.5966397      2.82921701    2.22554093
+hdl3cat_1   0.6312836      0.65704682    0.68386141
+hdl3cat_2   0.7189237      0.58860497    0.48190899
+
+#### 1f. Provide brief interpretations of the odds ratios found in one model (your choice) in 1e.
+
+For the model with a weight of 110 kg:
+
+Age (1.0429): An increase of one year in age has a 4.29% increase in the odds of the event occurring, keeping other variables constant.
+
+HTN (2.2255): Having hypertension (HTN) has a large 122.55% increase in the odds of the event occurring compared to not having hypertension, keeping other variables constant.
+
+hdl3cat_1 (0.6839): The "hdl3cat_1" category has a 31.61% decrease in the odds of the event occurring compared to being in another category, keeping other variables constant.
+
+hdl3cat_2 (0.4819): The "hdl3cat_2" category has a 51.81% decrease in the odds of the event occurring compared to being in another category, keeping other variables constant.
+
+#### 1g. Construct an appropriate data visualization to help with explaining the model results. Diabetic status should be on the y-axis, age should be on the x-axis, and use the regression lines constructed in 1d.
+
+```{r, echo = TRUE}
+
+
+dataP3 <- dataP3 %>% mutate(
+   m1_m1d70 = - 7.40 + 0.042*age + 1.28 * 1,
+   m1_m1d90 = - 4.52 + 0.042*age + 1.04 * 1,
+   m1_m1d110 = - 3.88 + 0.042*age + + 0.80 * 1
+)
+
+line_1 <- exp(dataP3$m1_m1d70) / (1 + exp(dataP3$m1_m1d70))
+line_2 <- exp(dataP3$m1_m1d90) / (1 + exp(dataP3$m1_m1d90))
+line_3 <- exp(dataP3$m1_m1d110) / (1 + exp(dataP3$m1_m1d110))
+
+
+
+ p1g <- ggplot(dataP3, aes(x = age, y = Diabetes)) +
+ geom_line(aes(y = line_1), color = "#F8766D", linetype = "solid") +
+geom_line(aes(y = line_2), color = "#00BA38", linetype = "solid") +
+geom_line(aes(y = line_3), color = "#619CFF", linetype = "solid") +
+xlab("Age") +
+ylab("Diabetic Status")
+
+print(p1g)
+```
+
+#### 2a. Using ordinal logistic regression, model diabetic status (*diab3cat*; 0=non-diabetic, 1=pre-diabetic, 2=diabetic) as a function of age (*age*; years), weight (*weight*; kg), hypertension status (*HTN*; 0=normotensive, 1=hypertensive), and fasting HDL categorization (*hdl3cat*; 0=low, 1=normal, 2=high). Remember to report the resulting model.
+
+```{r, echo = TRUE}
+dataP32 <- as_tibble(sas_data) %>%
+  dplyr::select(diab3cat, age, weight, HTN, hdl3cat) %>%
+  na.omit()
+
+dataP32$diab3cat <- factor(dataP32$diab3cat, levels = c(0, 1, 2), ordered = TRUE)
+
+head(dataP32)
+
+dataP32 %>% count(HTN, hdl3cat)
+
+dataP32 <- dummy_cols(dataP32, select_columns = c("HTN", "hdl3cat"))
+colnames(dataP32)
+
+m2 <- polr(diab3cat ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2, data = dataP32,  Hess = TRUE)
+summary(m2)
+
+
+```
+
+#### 2b. Which predictors, if any, are significant predictors of diabetic status?
+
+```{r, echo = TRUE}
+
+coeftest(m2)
+```
+
+The significant predictors are: age, weight, HTN, and hdl3cat_1, hdl3cat_2. They all have p-values that are less than the alpha level 0.05.
+
+#### 2c. Find the odds ratios and corresponding 95% CIs for the predictors.
+
+```{r, echo = TRUE}
+
+round(exp(confint(m2)),4)
+
+odds_ratios <- exp(coef(m2))
+
+ci <- confint(m2)
+ci_odds_ratios <- exp(ci)
+
+result <- data.frame(Odds_Ratio = odds_ratios, Lower_CI = ci_odds_ratios[, 1], Upper_CI = ci_odds_ratios[, 2])
+print(result)
+```
+
+#### 2d. Provide brief interpretations of the odds ratios found in 2d.
+
+Age:  For each one-unit increase in age, the odds of having diabetes increase by approximately 5.27%. This means that older individuals are more likely to have diabetes.
+
+Weight: For each one-unit increase in weight, the odds of having diabetes increase by approximately 2.49%. This means that higher weight is associated with an increased likelihood of diabetes.
+
+HTN: Individuals with HTN have 1.88 times the odds of having diabetes compared to those without hypertension. This suggests a significant positive association between hypertension and diabetes.
+
+hdl3cat:  Individuals in higher categories of hdl3cat have lower odds of having diabetes. For each increase in the HDL category, the odds of having diabetes decrease by approximately 25.47%. This means that higher HDL levels are associated with a reduced likelihood of diabetes.
+
+#### 3a. Using nominal/multinomial logistic regression, model diabetic status (*diab3cat*; 0=non-diabetic, 1=pre-diabetic, 2=diabetic) as a function of age (*age*; years), weight (*weight*; kg), hypertension status (*HTN*; 0=normotensive, 1=hypertensive), and fasting HDL categorization (*hdl3cat*; 0=low, 1=normal, 2=high). Remember to report the resulting model.
+
+```{r, echo = TRUE}
+dataP32 <- as_tibble(sas_data) %>%
+  dplyr::select(diab3cat, age, weight, HTN, hdl3cat) %>%
+  na.omit()
+
+dataP32 %>% count(hdl3cat)
+
+dataP32 <- dummy_cols(dataP32, select_columns = c("hdl3cat"))
+colnames(dataP32)
+
+
+m3 <- multinom(diab3cat ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2, data = dataP32)
+summary(m3)
+
+```
+Log Odds of being Pre-diabetic (Category 1) vs Non-diabetic (Category 0)
+
+ln(π/1-π) = -5.096 + 0.05197age + 0.02274weight + 0.3117HTN - 0.1761hdl3cat_1 - 0.5140hdl3cat_2
+
+Log Odds of being Diabetic (Category 2) vs Non-diabetic (Category 0)
+
+ln(π/1-π) = -8.344 + 0.0688age + 0.03462weight + 1.117HTN - 0.4929hdl3cat_1 - 0.7741hdl3cat_2
+
+#### 3b. Which predictors, if any, are significant predictors of diabetic status?
+
+```{r, echo = TRUE}
+coef_pre <- c(age = 0.05197, weight = 0.02274, HTN = 0.3117, hdl3cat_1 = -0.1761, hdl3cat_2 = -0.5140)
+se_pre <- c(age = 0.004785, weight = 0.002546, HTN = 0.102864, hdl3cat_1 = 0.109953, hdl3cat_2 = 0.127544)
+
+coef_diab <- c(age = 0.06882, weight = 0.03462, HTN = 1.117, hdl3cat_1 = -0.4929, hdl3cat_2 = -0.7741)
+se_diab <- c(age = 0.006547, weight = 0.003208, HTN = 0.145886, hdl3cat_1 = 0.143919, hdl3cat_2 = 0.167212)
+
+z_pre <- coef_pre / se_pre
+z_diab <- coef_diab / se_diab
+
+p_pre <- 2 * pnorm(-abs(z_pre))
+p_diab <- 2 * pnorm(-abs(z_diab))
+
+p_pre
+p_diab
+```
+
+The all have very small p values, < alpha level 0.05. They are significant for predicting diabetic status.
+
+#### 3c. Find the odds ratios and corresponding 95% CIs for the predictors.
+
+```{r, echo = TRUE}
+round(exp(confint(m3)), 4)
+
+odds_ratios <- exp(coef(m3))
+
+ci <- confint(m3)
+ci_odds_ratios <- exp(ci)
+
+result <- data.frame(Odds_Ratio = odds_ratios, Lower_CI = ci_odds_ratios[, , 1], Upper_CI = ci_odds_ratios[, , 2])
+print(result)
+```
+
+Intercept:
+Odds Ratio: 0.0060
+95% CI (0.0029, 0.0130)
+
+Age:
+Odds Ratio: 1.0533
+95% CI (1.0435, 1.0633)
+
+Weight:
+Odds Ratio: 1.0230
+95% CI (1.0179, 1.0281)
+
+HTN:
+Odds Ratio: 1.3658
+95% CI (1.1164, 1.6709)
+
+HDL3cat_1:
+Odds Ratio: 0.8385
+95% CI (0.6760, 1.0402)
+
+HDL3cat_2:
+Odds Ratio: 0.4658
+95% CI (0.4658, 0.7680)
+
+#### 3d. Provide brief interpretations of the odds ratios found in 3d.
+
+Intercept (0.00612): The odds of being in category 0 of "diab3cat" (which is the reference category) are significantly lower than category 1 when all other predictors are constant. So the odds of being in category 0 are 0.006 times the odds of being in category 1.
+
+Age (1.053): For each one-unit increase in age, the odds of being in category 0 of "diab3cat" are 1.05 times higher, when other predictors are constant.
+
+Weight (1.023): For each one-unit increase in weight, the odds of being in category 0 of "diab3cat" are 1.02 times higher, when other predictors are constant.
+
+HTN (1.365): Having hypertension (HTN) increases the odds of being in category 0 of "diab3cat" by a factor of 1.37, compared to not having hypertension, when other predictors are constant.
+
+HDL3cat_1 (0.839): Being in "HDL3cat_1" decreases the odds of being in category 0 of "diab3cat" by a factor of 0.84, compared to not being in "HDL3cat_1," when other predictors are constant.
+
+HDL3cat_2 (0.4658): Being in "HDL3cat_2" decreases the odds of being in category 0 of "diab3cat" by a factor of 0.47, compared to not being in "HDL3cat_2," when other predictors are constant.
+
+#### 4a. Consider the proportional odds assumption for ordinal logistic regression. Explain the proportional odds assumption to your supervisor, who is not a statistician.
+```{r, echo = TRUE}
+m3 <- multinom(diab3cat ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2, data = dataP32)
+
+dataP32$diab3cat <- factor(dataP32$diab3cat, levels = c(0, 1, 2), ordered = TRUE)
+
+m4a <- polr(diab3cat ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2, data = dataP32)
+
+summary(m4a)
+
+brant(m4a)
+```
+The assumption says that the relationship between the predictor variables and the ordinal response variable (diabetic status, in this case) is consistent across all categories of the response variable. The coefficients show how the log-odds of moving to a higher category (i.e., from non-diabetic to pre-diabetic or from pre-diabetic to diabetic) change for a one-unit increase for that predictor. The parallel regression assumption holds because all of the predictor tests (age, weight, HTN, hdl3cat_1, hdl3cat_2) have p-values > 0.05. This means that there is no strong evidence against the assumption that the effects of the predictors are consistent across categories.
+
+#### 4b. Use the appropriate hypothesis test to determine if we should use model 2a or model 3a when reporting on diabetic status in terms of non-diabetic, pre-diabetic, and diabetic.
+
+```{r, echo = TRUE}
+dataP32$diab3cat <- as.factor(dataP32$diab3cat)
+
+m2 <- polr(diab3cat ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2, data = dataP32, Hess = TRUE)
+
+m3 <- multinom(diab3cat ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2, data = dataP32)
+
+lr_test <- lrtest(m2, m3)
+
+print(lr_test)
+```
+You should use Model 3a (multinom) when reporting on diabetic status for categories non-diabetic, pre-diabetic, and diabetic, since it shows a better fit to the data based on the likelihood ratio test. This is shown by the significant p-value (0.001895) associated with the test, which means that Model 2 explains the variation in the data better.
+
+#### 4e. Extra credit! Construct a data visualization for the model chosen in 4b to help explain the model's results.
+```{r, echo = TRUE}
+
+coef_data <- data.frame(
+  Variable = rownames(summary(m3)$coefficients),
+  Estimate = summary(m3)$coefficients[, 1]
+)
+
+
+ggplot(data = coef_data, aes(x = Variable, y = Estimate, fill = Estimate < 0)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "blue")) +
+  labs(title = "Coefficients with Significance Levels", y = "Estimate") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+#### 5. Write a summary paragraph that (1) summarizes the results of each model, (2) compares and contrasts the results. This paragraph can be more technical in nature (i.e., you are writing it for me, a professional statistician/data scientist).
+Model 1: The age, weight, HTN, and the weight:HTN interaction are statistically significant (p < 0.05).
+The hdl3cat, hdl3cat_2, and weight:hdl3cat_1 interactions are not statistically significan
+
+Model 2: All predictors (age, weight, HTN, hdl3cat categories) are statistically significant in predicting diabetes categories.
+
+Model 3: The coefficients for each predictor are statistically significant in predicting different diabetes categories within the multinomial model.
+
+Comparison/Contrast:
+Model 1 is for binary outcomes and is good for when you want to investigate the presence or absence prediction.
+Model 2 is for ordinal outcomes when you want to capture the order or severity of diabetes.
+Model 3 is for nominal outcomes when you need to predict specific diabetes categories without implying any order.
+
+#### 6. Required for graduate students / extra credit for undergraduate students: write a "one pager" for the lead scientist of JHS. This should include a paragraph that outlines the methods used and a separate paragraph that discusses results. Remember that the lead scientist is not a statistician or data scientist, so this should be written such that they will understand what you are conveying.
+
+The first model is diabetic status (*Diabetes*; 0=non-diabetic, 1=diabetic) as a function of age, weight  hypertension status (*HTN*; 0=normotensive, 1=hypertensive), and fasting HDL categorization (*hdl3cat*; 0=low, 1=normal, 2=high), and the interactions between (1) weight and hypertension and (2) weight and fasting HDL categorization. The logistic regression model is used to predict the presence or absence of diabetes. The coefficients represent the log-odds of having diabetes. 
+For example, the coefficient for age (0.042307) means that for a one-unit increase in age, the log-odds of having diabetes increase by 0.042307. Age and weight have a significant positive effect on the likelihood of having diabetes. Having hypertension (HTN) also significantly increases the likelihood of having diabetes. Interaction terms between weight and HTN and weight and hdl3cat_2 are statistically significant, showing that the relationship between these variables and diabetes is not just an add-on.
+The model shows the factors influencing diabetes and can be used to predict the probability of having diabetes based on the given predictors.
+
+In the second model we used ordinal logistic regression, to model diabetic status (*diab3cat*; 0=non-diabetic, 1=pre-diabetic, 2=diabetic) as a function of age, weight, hypertension status (*HTN*; 0=normotensive, 1=hypertensive), and fasting HDL categorization (*hdl3cat*; 0=low, 1=normal, 2=high). The ordered logistic regression model is used to predict the ordered categories of diab3cat (Non-diabetic, Pre-diabetic, Diabetic). The coefficients represent the log-odds of moving to a higher category (e.g., from Non-diabetic to Pre-diabetic, or from Pre-diabetic to Diabetic). For example, the coefficient for age (0.05135) means that for a one-unit increase in age, the log-odds of moving to a higher category increase by 0.05135. Age and weight have a significant positive effect on the likelihood of moving to a higher category, showing a higher likelihood of being diabetic or pre-diabetic. Having hypertension (HTN) also significantly increases the likelihood of moving to a higher category. The coefficients for hdl3cat_1 and hdl3cat_2 are negative, indicating that hdl categories are associated with a lower likelihood of moving to a higher category. The model shows the factors influencing the movement from non-diabetic to pre-diabetic and diabetic categories and can be used to predict these transitions based on the given predictors.
+
+The last model used nominal/multinomial logistic regression, to model diabetic status (*diab3cat*; 0=non-diabetic, 1=pre-diabetic, 2=diabetic) as a function of age, weight, hypertension status (*HTN*; 0=normotensive, 1=hypertensive), and fasting HDL categorization (*hdl3cat*; 0=low, 1=normal, 2=high). The multinomial logistic regression model is used to predict the category of diab3cat (Non-diabetic, Pre-diabetic, Diabetic). The coefficients represent the log-odds of being in each category compared to a reference category (hdl3cat_0). For Category 1 (Non-diabetic), age, weight, and the presence of hypertension (HTN) have significant positive effects on the likelihood of being in this category. A higher hdl category (hdl3cat_1 and hdl3cat_2) has a negative effect, reducing the likelihood of being non-diabetic. For Category 2 (Pre-diabetic), similar effects of age, weight, and hypertension happened, but the coefficients are generally larger. A higher hdl category also reduces the likelihood of being pre-diabetic. These coefficients show the factors that influence the likelihood of being in each category of diab3cat based on the provided predictors.
+
+We completed a series of tests for the proportional odds assumption for each predictor variable. The omnibus test has a significant p-value (p = 0.01), which might indicate a potential violation of the proportional odds assumption. This means that one or more predictor variables might have varying effects on the odds of moving between the ordered categories.
+
+The likelihood ratio test examines whether there is a significant difference in model fit between these two models:
+Model 1: diab3cat ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2 (polr model).
+Model 2: diab3cat ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2 (multinom model).
+The test compares the models based on their log-likelihood values. 
+Model 1 has 7 degrees of freedom and a log-likelihood value of -2248.8.
+Model 2 has 12 degrees of freedom and a log-likelihood value of -2239.3.
+The lrt test statistic is found as the difference in log-likelihood values (Chisq) between the two models. In this case, the test statistic is 19.033, and the p-value is 0.001895. Model 2 is a better fit for the data and based on the lrt test, we should use Model 2 (diab3cat ~ age + weight + HTN + hdl3cat_1 + hdl3cat_2) when reporting on diabetic status in terms of non-diabetic, pre-diabetic, and diabetic.
+

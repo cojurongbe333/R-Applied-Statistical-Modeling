@@ -1,0 +1,326 @@
+---
+title: "Project 5"
+author: "Chantal Ojurongbe"
+format: html
+self-contained: true
+---
+
+**For the following secnarios, determine what distribution is appropriate for modeling purposes. Provide appropriate justification on your selection. If you are considering the normal distribution, put together a basic model to examine the residuals. Note that it is possible for data to be continuous but the normal distribution is not appropriate.**
+
+**1. Consider the video game data here: [https://think.cs.vt.edu/corgis/csv/video_games/](https://think.cs.vt.edu/corgis/csv/video_games/).**
+
+```{r, echo = TRUE}
+library(nnet)
+library(fitdistrplus)
+library(fastDummies)
+library(haven)
+library(lindia)
+library(tidyverse)
+library(gsheet)
+library(DescTools)
+library(FSA)
+library(dplyr)
+library(ggplot2)
+library(car)
+library(agricolae)
+library(gmodels)
+library(dplyr)
+library(readr)
+library(broom)
+library(modelr)
+library(performance)
+library(GGally)
+library(emmeans)
+library(visreg)
+library(see)
+library(patchwork)
+library(caret)
+library(MASS)
+library(nnet)
+library(lmtest)
+library(brant)
+
+```
+```{r, echo = TRUE}
+
+data_P5csv <- read_csv("video_games.csv", show_col_types = FALSE)
+
+print(colnames(data_P5csv))
+
+data_P5csv <- data_P5csv %>%
+  dplyr::select(`Metrics_Sales`, `Metrics_Review_Score`, Features_Handheld, Features_Multiplatform, Features_Online, Metadata_Licensed, Metadata_Sequel, Length_Main_Story_Average) %>%
+  na.omit()
+
+print(data_P5csv)
+
+hist(data_P5csv$Metrics_Sales)
+
+log_data <- log(data_P5csv$Metrics_Sales)
+
+fit_lognorm <- fitdist(log_data, "norm")
+
+qqcomp(fit_lognorm)
+
+fit_lognorm <- fitdist(data_P5csv$Metrics_Sales, "lnorm")
+
+params <- list(meanlog = fit_lognorm$estimate[["meanlog"]], sdlog = fit_lognorm$estimate[["sdlog"]])
+
+plotdist(data_P5csv$Metrics_Sales, "lnorm", para = params)
+
+```
+Its not normally distributed. Normal distribution is not appropriate. 
+
+**1a. Determine the appropriate modeling strategy when examining total sales (*Metrics.Sales*; millions of dollars).**
+
+```{r, echo = TRUE}
+
+data_P5csv1 <- read_csv("video_games.csv", show_col_types = FALSE)
+
+print(colnames(data_P5csv1))
+
+data_P5csv <- data_P5csv %>%
+  dplyr::select(Metrics_Sales, Metrics_Review_Score, Features_Handheld, Features_Multiplatform, Features_Online, Metadata_Licensed, Metadata_Sequel, Length_Main_Story_Average) %>%
+  na.omit()
+
+print(data_P5csv)
+
+summary(data_P5csv$Metrics_Sales)
+
+exmodel1 <- lm(Metrics_Sales ~ Metrics_Used_Price, data = data_P5csv1)
+summary(exmodel1)
+
+residuals <- resid(exmodel1)
+qqnorm(residuals)
+qqline(residuals)
+
+data_P5csv1 %>%
+  dplyr::summarize(mean = mean(Metrics_Sales, na.rm = TRUE),
+  sd = sd(Metrics_Sales, na.rm = TRUE),
+  median = median(Metrics_Sales, na.rm = TRUE),
+  var = var(Metrics_Sales, na.rm = TRUE),
+  IQR = IQR(Metrics_Sales, na.rm = TRUE))
+
+
+```
+When examining total sales (Metrics_Sales) in millions of dollars for video games, the modeling strategy largely depends on the specific analytical goals. 
+
+For understanding the distribution and characteristics of sales figures we analyze mean, median, standard deviation, etc., to understand the central tendency and variability of sales.
+Mean: The average sales figure is approximately 0.503 million dollars. This means that, on average, each game sold about half a million dollars.
+Standard Deviation: The standard deviation is about 1.07 million dollars. This high value suggests a considerable spread in the sales figures across different games, showing significant variability.
+Median: The median sales figure is 0.21 million dollars. This means that half of the games sold less than or equal to 210,000 dollars, and the other half sold more. The median being lower than the mean suggests a right-skewed distribution of sales figures, where a smaller number of games have very high sales, pulling the mean upwards.
+Variance (Var): The variance is approximately 1.145 million dollars squared. 
+
+Use histograms, box plots, scatter plots, and time series plots (if temporal data is available) to visualize sales distribution and trends. Scatter plots can help visualize these relationships.
+
+The aim is to predict total sales based on various game attributes then linear Regression is appropriate. The relationship between predictors (like genre, platform, review score, etc.) and sales is linear.
+
+ANOVA or Kruskal-Wallis Test are used to compare sales means or medians across different categories.
+Post Hoc Tests are used if significant differences are found, to determine which groups differ from each other.
+
+**1b. Determine the appropriate modeling strategy when examining review score for the games (*Metrics.Review.Score*)**
+
+```{r, echo = TRUE}
+ggplot(data_P5csv, aes(x = Metrics_Review_Score)) +
+  geom_histogram(aes(y = after_stat(density)), binwidth = 1, color = "black", fill = "blue") +
+  geom_density(alpha = 0.2, fill = "#FF7777") +
+  labs(title = "Distribution of Video Game Review Scores",
+       x = "Review Score",
+       y = "Density")
+
+summary(data_P5csv$Metrics_Review_Score)
+
+data_P5csv1 %>%
+  dplyr::summarize(mean = mean(Metrics_Review_Score, na.rm = TRUE),
+  sd = sd(Metrics_Review_Score, na.rm = TRUE),
+  median = median(Metrics_Review_Score, na.rm = TRUE),
+  var = var(Metrics_Review_Score, na.rm = TRUE),
+  IQR = IQR(Metrics_Review_Score, na.rm = TRUE))
+```
+When examining review scores for games, the modeling strategy depends on the specific objectives of the analysis. Review scores are typically numerical and continuous.
+
+The goal is to understand the distribution and characteristics of review scores, so we start by analyzing mean, median, standard deviation, etc.
+Mean: The average review score is approximately 68.83. This indicates that, on average, the games have a score around 68.83.
+Standard Deviation (SD): The standard deviation is about 12.96. This value shows the amount of variability or spread in the review scores. A higher standard deviation indicates greater variability.
+Median: The median review score is 70. This value suggests that half of the games have a review score of 70 or lower, and the other half have a score higher than 70. The median being slightly higher than the mean might indicate a slight left-skew in the distribution.
+Variance (Var): The variance is approximately 167.86.
+
+Use histograms, box plots, and scatter plots to visualize the distribution and identify any patterns or outliers.
+
+The aim is to predict review scores based on various attributes of the games, so we use linear Regression: the relationship between predictors (like game genre, platform, publisher, etc.) and review scores is linear.
+
+To compare review scores across different groups (e.g., by genre, platform) we use, ANOVA to compare means across different groups.
+
+Post Hoc Tests if significant differences are found, these tests can determine which groups differ from each other.
+
+**2. Consider the hospital safety data here: [https://corgis-edu.github.io/corgis/csv/hospitals/](https://corgis-edu.github.io/corgis/csv/hospitals/).** 
+
+```{r, echo = TRUE}
+data_P5csv2 <- read_csv("hospitals.csv", show_col_types = FALSE)
+
+print(colnames(data_P5csv2))
+
+
+```
+
+**2a. Suppose we are interested in analyzing data from hospitals that are not of unknown or proprietary facility type (*Facility.Type*). Perform the appropriate data management steps to create a subset of data meeting this criteria.**
+
+```{r, echo = TRUE}
+data_P5csv2a <- data_P5csv2 %>%
+  dplyr::select(Facility_Name, Facility_City, Facility_State, Facility_Type) %>%
+  na.omit()
+
+print(data_P5csv2a)
+
+hospitals_data <- data_P5csv2a %>%
+  filter(Facility_Type %in% c('Unknown', 'Proprietary'))
+
+print(hospitals_data)
+```
+
+**2b. Determine the appropriate modeling strategy when modeling the safety ratings (*Rating.Safety*) that are either above or below the national average.**
+
+To model the safety ratings (Rating_Safety) in the hospital dataset, in terms of determining whether they are above or below the national average, we use a binary category model. The goal is to categorize each hospital based on whether its safety rating is above or below the average. T
+
+First, compute the average safety rating across all hospitals. This will serve as the baseline to determine whether a specific hospital's rating is above or below average.
+
+Transform the Rating_Safety into a binary variable. This new variable will have a value of 1 (or 'Above') for ratings above the national average and 0 (or 'Below') for ratings below the average.
+
+Choose relevant predictor variables from the dataset. These could be other ratings (like overall rating, mortality rating), facility type, location, or any other variables that might influence the safety rating.
+
+For binary categories, logistic regression is the best choice. 
+
+Interpret the model to understand the impact of different predictors on the likelihood of a hospital's safety rating being above or below the national average.
+
+**2c. Determine the appropriate modeling strategy when modeling the safety ratings (*Rating.Safety*) that are above, the same as, or below the national average.**
+```{r}
+data_P5csv2$Rating_Safety <- as.factor(data_P5csv2$Rating_Safety)
+
+multinom_model <- multinom(Rating_Safety ~ Rating_Mortality + Rating_Overall, data = data_P5csv2)
+
+summary(multinom_model)
+
+
+summary(data_P5csv2$Rating_Safety)
+```
+
+
+Modeling safety ratings (Rating_Safety) to categorize them as above, the same as, or below the national average, mean we have a multi-class categorization problem. The goal here is to categorize each hospital's safety rating into one of three categories. 
+
+First, we need to compute the national average of the safety ratings. If the ratings are categorical (like 'High', 'Medium', 'Low'), convert them to a numerical scale to calculate the average.
+
+Transform the Rating_Safety into a categorical variable with three levels: 'Above', 'Same', and 'Below' the national average.
+
+Then we will choose variables from the dataset that are hypothesized to influence the safety rating. This could include facility type, location, other ratings, etc.
+
+Choose a Multinomial Logistic Regression: A version of logistic regression that can handle multiple classes.
+
+Interpret the model results to understand the impact of different predictors.Also, validate the model on a separate test set.
+
+**2d. Determine the appropriate modeling strategy when examining the cost of heart attack procedure.**
+
+```{r, echo = TRUE}
+ggplot(data_P5csv2, aes(x = Procedure_Heart_Attack_Cost)) +
+  geom_histogram(binwidth = 5000, fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Histogram of Heart Attack Procedure Costs",
+       x = "Cost ($)",
+       y = "Frequency")
+
+summary(data_P5csv2$Procedure_Heart_Attack_Cost)
+```
+When examining the cost of heart attack procedures we focus on understanding and predicting a continuous variable (the cost). The appropriate modeling strategy involves regression analysis.
+
+Start by exploring the distribution of the heart attack procedure costs using descriptive statistics (mean, median, standard deviation, etc.) and visualization tools (histograms, box plots). This will give an initial understanding of the data, including its range and any potential outliers.
+
+Choose linear Regression: If the relationship between the predictors and the cost appears to be linear, we start with linear regression model. This will help us understand how changes in predictor variables are associated with changes in procedure cost.
+
+Assess the model's performance using metrics like R-squared and Adjusted R-squared. It's also important to validate the model's performance on a separate test set.
+
+Residual Analysis: After fitting the model, conduct a residual analysis to check for constant variance of residuals and ensure that the residuals are normally distributed. 
+
+Depending on the dataset, consider external factors that might influence the cost of heart attack procedures, such as geographic location, hospital facilities, patient demographics, or insurance types. Incorporating these factors into the model can provide more comprehensive insights. 
+
+If the predictors include categorical variables (like hospital type), convert these into a format suitable for regression analysis.
+
+**3. Consider the billionaire data here: [https://corgis-edu.github.io/corgis/csv/billionaires/](https://corgis-edu.github.io/corgis/csv/billionaires/).** 
+
+```{r, echo = TRUE}
+data_P5csv3 <- read_csv("billionaires.csv", show_col_types = FALSE)
+
+print(colnames(data_P5csv3))
+```
+
+**3a. Determine the appropriate modeling strategy when examining the worth of the billionaire (*wealth.worth.in.billions*).**
+```{r}
+exmodel3a <- lm(wealth_worth_in_billions ~ wealth_type, data = data_P5csv3)%>%
+                                               na.omit()
+
+
+summary(exmodel3a)
+
+ggplot(data_P5csv3, aes(x = wealth_worth_in_billions)) +
+  geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+  labs(title = "Histogram of Billionaire Wealth",
+       x = "Wealth in Billions",
+       y = "Frequency")
+```
+
+
+The goal is to predict a billionaire's wealth based on different predictors.
+
+Choose linear Regression: Useful if the relationship between the predictors (like age, industry, country, years of experience, etc.) and wealth is linear.
+
+Analyze mean, median, standard deviation, etc., to understand the distribution of wealth.
+Use histograms, box plots, or scatter plots to visualize the wealth distribution and its relationship with other variables.
+
+Examine the correlation between wealth and other variables.
+
+If the aim is to understand the causal impact of certain factors on billionaire wealth:
+
+If comparing wealth across different groups (e.g., by industry or geography):
+
+ANOVA Tests: To compare means across different groups.
+
+**3b. Determine the appropriate modeling strategy when examining how the person became a billionaire (*wealth.how.inherited*).**
+```{r}
+multinom_model3 <- multinom(wealth_how_inherited ~ wealth_how_category + wealth_type, data = data_P5csv3)%>%
+                                               na.omit()
+
+summary(multinom_model3)
+```
+
+
+Calculate the number and proportion of billionaires in each category (e.g., inherited vs. self-made).
+Analyze the relationship between the method of how wealth was acquired and other variables like industry, country, age, etc.
+
+To compare different groups (e.g., inherited vs. self-made billionaires) in terms of other metrics:
+
+Chi-Square Test: To test if the distribution of how wealth was acquire is different across categories of another categorical variable.
+
+ANOVA Tests: When comparing continuous variables (like net worth, age, etc.) across different wealth acquisition categories.
+
+The aim is to predict the likelihood of a billionaire having inherited their wealth:
+
+Choose logistic Regression: Useful for binary categories F(e.g., inherited vs. not inherited).
+Multinomial Logistic Regression: If there are more than two categories of how wealth was acquired.
+Use bar charts, pie charts, or heat maps to visualize the distribution and relationships.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

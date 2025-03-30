@@ -1,0 +1,317 @@
+---
+title: "Project 4"
+author: "Chantal Ojurongbe"
+format: html
+self-contained: true
+---
+
+#### This week you will be analyzing data from the Jackson Heart Study (JHS). You can find the data in the Week 1 module on Canvas. For full credit, you must include all code chunks and R output backing up your responses.
+```{r, echo = TRUE}
+library(fastDummies)
+library(haven)
+library(lindia)
+library(tidyverse)
+library(gsheet)
+library(DescTools)
+library(FSA)
+library(dplyr)
+library(ggplot2)
+library(car)
+library(agricolae)
+library(gmodels)
+library(dplyr)
+library(car)
+library(readr)
+library(broom)
+library(modelr)
+library(performance)
+library(GGally)
+library(emmeans)
+library(visreg)
+library(see)
+library(patchwork)
+library(caret)
+library(MASS)
+library(nnet)
+library(lmtest)
+library(brant)
+
+sas_data <- read_sas("analysis1.sas7bdat")
+
+head(sas_data)
+
+
+```
+#### 1. Create a variable that counts the number of controllable risk factors for stroke: blood pressure (*idealHealthBP*; 1=ideal health, 0=not ideal health), smoking status (*idealHealthSMK*; 1=ideal health, 0=not ideal health), diabetes (*idealHealthDM*; 1=ideal health, 0=not ideal health), diet  (*idealHealthNutrition*; 1=ideal health, 0=not ideal health), physical activity (*idealHealthPA*; 1=ideal health, 0=not ideal health), obesity  (*idealHealthBMI*; 1=ideal health, 0=not ideal health), and high cholesterol  (*idealHealthChol*; 1=ideal health, 0=not ideal health). Note: all of the idealHealth variables indicate *ideal* health… you are being asked to count the number of *not ideal* health indicators.
+```{r, echo = TRUE}
+
+
+dataP4 <- as_tibble(sas_data %>% dplyr::select(idealHealthBP, idealHealthSMK, idealHealthDM, 
+                                               idealHealthNutrition, idealHealthPA, 
+                                               idealHealthBMI, idealHealthChol,Diabetes,PrivatePublicIns,
+                                               age, weight, HTN, HSgrad, hdl3cat)) %>%
+                                               na.omit()
+
+head(dataP4)
+
+names(dataP4)
+dataP4$notIdealHealthCount <- rowSums(1 - dataP4[,c("idealHealthBP", 
+                                                 "idealHealthSMK", 
+                                                 "idealHealthDM", 
+                                                 "idealHealthNutrition", 
+                                                 "idealHealthPA", 
+                                                 "idealHealthBMI", 
+                                                 "idealHealthChol")])
+
+head(dataP4)
+
+```
+#### 2a. Use Poisson regression to model the count variable created in 1 as a function of age (*age*; years), health insurance (*PrivatePublicIns*; 0=uninsured, 1=private insurance only, 2=public insurance only, 3=private and public insurances), and education status (*HSgrad*; 0=did not graduate high school, 1=graduated high school).
+
+```{r, echo = TRUE}
+
+dataP4 %>% count(PrivatePublicIns)
+
+dataP4 <- dummy_cols(dataP4, select_columns = "PrivatePublicIns")
+colnames(dataP4)
+
+m2a <- glm(notIdealHealthCount ~ age + PrivatePublicIns_0 + PrivatePublicIns_1 + PrivatePublicIns_2 + PrivatePublicIns_3 + HSgrad, data = dataP4,
+         family = "poisson")
+
+
+summary(m2a)
+
+coefficients(m2a)
+
+
+predicted_counts <- predict(m2a, type = "response")
+
+mean_counts <- mean(predicted_counts)
+
+var_counts <- var(predicted_counts)
+
+print(mean_counts)
+print(var_counts)
+```
+
+ln(y) = 1.08 + 0.008age + 0.081PrivatePublicIns_0 + 0.022PrivatePublicIns_1 + 0.055PrivatePublicIns_2 - 0.021HSgrad
+
+With PrivatePublicIns_3 as the reference. 
+
+#### 2b. Perform the appropriate hypothesis tests to determine which, if any, are significant predictors of the number of controllable risk factors for stroke.
+
+```{r, echo = TRUE}
+
+m2a <- glm(notIdealHealthCount ~ age + PrivatePublicIns_0 + PrivatePublicIns_1 + PrivatePublicIns_2 + PrivatePublicIns_3 + HSgrad, data = dataP4, family = "poisson")
+
+
+model_summary <- summary(m2a)
+
+coef_table <- model_summary$coefficients
+
+print(coef_table)
+
+p_values <- coef_table[, "Pr(>|z|)"]
+
+print(p_values)
+
+significant_predictors <- names(p_values[p_values < 0.05])
+
+print(significant_predictors)
+```
+
+For the intercept:
+Rejection Region
+Reject H0 if p < α.
+
+Hypotheses
+H0 : βi = β(0)i
+H1 : βi ≠ β(0)i
+
+Test Statistic
+z0 = 12.3667269 
+
+ Rejection Region: Reject 
+H0  if p<p<α (given p≈3.956163e−35, which is less than α = 0.05)
+
+For age:
+Rejection Region
+Reject H0 if p < α.
+
+Hypotheses
+H0 : βi = β(0)i
+H1 : βi ≠ β(0)i
+
+Test Statistic
+z0 = 7.1883507 
+
+ Rejection Region: Reject 
+H0  if p<p<α (given p≈6.557866e−13, which is less than α = 0.05)
+
+For PrivatePublicIns_0:
+Rejection Region
+Reject H0 if p < α.
+
+
+(Intercept): p-value = 3.956163e-35. This is significant.
+age: p-value = 6.557866e-13. This is significant.
+PrivatePublicIns_0 (uninsured): p-value = 0.06745188. This is not significant.
+PrivatePublicIns_1 (private insurance only): p-value = 0.5325457. This is not significant.
+PrivatePublicIns_2 (public insurance only): p-value = 0.1693500. This is not significant.
+HSgrad (graduated high school): p-value = 0.5071110. This is not significant.
+
+#### 2c. Find the incident rate ratios and corresponding 95% CIs for the predictors.
+
+```{r, echo = TRUE}
+
+coefficients_table <- exp(coefficients(m2a))
+conf_intervals <- exp(confint(m2a))
+
+results <- cbind(coefficients_table, conf_intervals)
+
+print(results)
+```
+
+#### 2d. Provide brief interpretations of the incident rate ratios found in 2c.
+
+(Intercept): The incidence rate ratio is 2.96, with a 95% confidence interval ranging from 2.49 to 3.51. This shows that for an individual with all other variables at zero (but age cannot be zero), the expected count of non-ideal health factors is about 2.96 times the count of the reference group.
+
+Age: The incidence rate ratio for age is 1.008, with a 95% confidence interval from 1.006 to 1.010. This suggests that with each additional year of age, the expected count of non-ideal health factors increases by 0.8%. This effect is statistically significant, since the confidence interval does not include 1.
+
+PrivatePublicIns_0 (Uninsured): The incidence rate ratio is 1.084, and the 95% confidence interval is 0.994 to 1.183. This means that being uninsured is associated with an 8.4% increase in the expected count of non-ideal health factors compared to the reference group (potentially those with both private and public insurances), although this result is not statistically significant since the confidence interval includes 1.
+
+PrivatePublicIns_1 (Private insurance only): The incidence rate ratio is 1.022, with a confidence interval from 0.955 to 1.095. This shows a non-significant 2.2% increase in the expected count of non-ideal health factors for those with private insurance only, compared to the reference group.
+
+PrivatePublicIns_2 (Public insurance only): The incidence rate ratio is 1.056, with a confidence interval from 0.977 to 1.142. This represents a non-significant 5.6% increase in the expected count of non-ideal health factors for those with public insurance only, compared to the reference group.
+
+HSgrad(high school graduation status): The incidence rate ratio is below 1 (0.979), showing that those who graduated from high school have a slightly lower expected count of non-ideal health factors compared to those who did not graduate. However, this effect is not statistically significant since the confidence interval (0.9208, 1.0421) includes 1.
+
+#### 2e. Construct an appropriate data visualization to help with explaining the model results. Number of controllable risk factors for stroke should be on the y-axis and age should be on the x-axis. You choose what lines to create.
+
+```{r, echo = TRUE}
+
+dataP4 <- dataP4 %>%
+  mutate(
+    Uninsured = exp(1.08 + 0.008*age +0.081*0 + 0.022*0 + 0.055*0 - 0.021*0), 
+    Public = exp(1.08 + 0.008*age - 0.081*1 - 0.022*1 - 0.055*1 - 0.021*1),
+    Private = exp(1.08 + 0.008*age - 0.081*2 - 0.022*2 - 0.055*2 - 0.021*2)
+  )
+
+P2e <- dataP4 %>% 
+  ggplot(aes(x = age)) +
+  geom_point(aes(y = notIdealHealthCount)) +
+  geom_point(aes(y = Uninsured), color = "orange") +
+  geom_line(aes(y = Public), color = "green") +
+  geom_line(aes(y = Private), color = "blue") +
+  geom_text(aes(x = 3.25, y = 5.45, label = "Uninsured"), color="black", show.legend = FALSE) +
+  geom_text(aes(x = 3.25, y = 3.5, label = "Public"), color="black", show.legend = FALSE) +
+  geom_text(aes(x = 3.25, y = 2.8, label = "Private"), color="black", show.legend = FALSE) +
+  ylab("Number of controllable risk factors for stroke") +
+  scale_x_discrete(name ="Age in Years", limits=c("1","2","3")) +
+  theme_bw()
+
+print(P2e)
+
+```
+
+
+#### 3a. Use negative binomial regression to model the count variable created in 1 as a function of age (*age*; years), health insurance (*PrivatePublicIns*; 0=uninsured, 1=private insurance only, 2=public insurance only, 3=private and public insurances), and education status (*HSgrad*; 0=did not graduate high school, 1=graduated high school).
+
+```{r, echo = TRUE}
+
+m3a <- glm.nb(notIdealHealthCount ~ age + PrivatePublicIns_0 + PrivatePublicIns_1 + PrivatePublicIns_2 + PrivatePublicIns_3 + HSgrad, data=dataP4)
+
+summary(m3a)
+
+
+```
+ln(y) = 1.08 + 0.008age + 0.081PrivatePublicIns_0 + 0.022PrivatePublicIns_1 + 0.055PrivatePublicIns_2 - 0.021HSgrad
+
+With PrivatePublicIns_3 as the reference. This is the same as the poission model resulting model. 
+
+#### 3b. Compare and contrast models 2a and 3a. What do you notice?
+
+Poisson Model (m2a):
+Significance:
+The intercept nad age are statistically significant (p < 0.05).
+PrivatePublicIns_1, PrivatePublicIns_2, PrivatePublicIns_3, and HSgrad are not statistically significant.
+
+Negative Binomial Model (m3a):
+Significance:
+Similar to the Poisson model, the intercept and age are statistically significant (p < 0.05).
+PrivatePublicIns_1, PrivatePublicIns_2, PrivatePublicIns_3, and HSgrad are not statistically significant.
+
+PrivatePublicIns_0 is barely significant in both models.
+
+There is a warning about the iteration limit being reached during the fitting process. This usually happens when the model has a difficult time converging, and it may be an indication of overdispersion. 
+
+Both models have similar predictor variables and coefficients.
+
+#### 3c. Check the assumption for Poisson regression. 
+```{r, echo = TRUE}
+hist(residuals(m2a, type = "pearson"),
+     main = "Histogram of Pearson Residuals",
+     xlab = "Pearson Residuals")
+
+mean_response <- mean(dataP4$notIdealHealthCount)
+var_response <- var(dataP4$notIdealHealthCount)
+
+print(paste("Mean of response variable:", mean_response))
+print(paste("Variance of response variable:", var_response))
+
+if (abs(mean_response - var_response) < 0.1 * mean_response) {
+  print("The response variable appears to be equidispersed.")
+} else {
+  print("There may be overdispersion or underdispersion in the response variable.")
+}
+
+```
+
+The variance of the response variable is much greater than the mean (variance is approximately 1.382, and the mean is approximately 4.640), which shows overdispersion or underdispersion.
+
+#### 3d. Use your response in 3c to explain your observations in 3b.
+
+The underdispersion does back to the warning from 3a about the iteration limit being reached during the fitting process. Instead of it being overdispersion, it is underdispersion. 
+
+#### 4a. Consider zero-inflated Poisson and negative binomial regression models. Explain the zero-inflated models to your supervisor, who is not a statistician or data scientist.
+
+Zero-inflated models are models are made to manipulate datasets where the outcome variable has a lot of zero values. We use these models to deal with count data, where many observations are zero, and there's a need to account for excessive zero occurrences. The zero-inflated model can handle both structural zeros and excess zeros in a model. It helps tell the difference between zeros that are part of the process and those that are excessive.
+
+#### 4b. Explain why the data at hand does not require a zero-inflated model and provide some sort of statistically-sound justification using the data (a graph, a table, etc.).
+```{r, echo = TRUE}
+
+zero_proportion <- sum(dataP4$notIdealHealthCount == 0) / nrow(dataP4)
+print(paste("Proportion of zeros:", zero_proportion))
+
+lambda <- mean(dataP4$notIdealHealthCount)
+expected_zeros <- dpois(0, lambda)
+print(paste("Expected proportion of zeros (Poisson):", expected_zeros))
+
+ggplot(dataP4, aes(x = notIdealHealthCount)) +
+  geom_bar() +
+  xlab("Number of Non-Ideal Health Factors") +
+  ylab("Count") +
+  ggtitle("Distribution of Non-Ideal Health Factors Count")
+```
+
+
+To determine if a zero-inflated model is necessary, we must look for the excess of zero counts in the data compared to what would be expected from a standard Poisson or Negative Binomial distribution. Zero-inflated models are particularly useful when the data generating process includes both true zeros (structural zeros) and zeros that result from a separate random process (sampling zeros). There are no zero counts in the dataset (Proportion of zeros: 0) and under a Poisson distribution we expect about 0.97% of the counts to be zero (Expected proportion of zeros (Poisson): 0.0097).
+
+#### 5. Write a summary paragraph that summarizes the results of the Poisson model. This paragraph can be more technical in nature (i.e., you are writing it for me, a professional statistician/data scientist).
+
+The Poisson regression model was used on the data data, where the count of non-ideal health factors (notIdealHealthCount) was modeled as a function of age, health insurance status (categorized into four groups: uninsured, private insurance only, public insurance only, and both private and public insurances), and high school graduation status (HSgrad).
+The coefficient for age is positive (0.007979) and highly significant (p < 0.001), suggesting that as age increases, the count of non-ideal health factors tends to increase as well.  The coefficients for PrivatePublicIns_0 (uninsured), PrivatePublicIns_1 (private insurance only), and PrivatePublicIns_2 (public insurance only) are not statistically significant at the alpha 0.05 level, showing that these categories of health insurance status do not have an effect on the count of non-ideal health factors compared to the reference category (PrivatePublicIns_3, private and public insurances). The coefficient for HSgrad (high school graduation status) is also not significant (p = 0.5071), showing that graduation status does not have a statistically significant impact on the count of non-ideal health factors.
+
+The mean of the predicted counts of the model is 4.64, and the variance is 0.197. The low variance, compared to the mean, is what you would expect in a Poisson distribution, which assumes equidispersion (where the mean equals the variance). The Poisson regression model shows that age is a significant predictor of the number of non-ideal health factors, while health insurance status and high school graduation status do not show a significant relevance.
+
+#### 6. Required for graduate students / extra credit for undergraduate students: write a "one pager" for the lead scientist of JHS. This should include a paragraph that outlines the methods used and a separate paragraph that discusses results. Remember that the lead scientist is not a statistician or data scientist, so this should be written such that they will understand what you are conveying.
+
+First we created a variable that counts the number of controllable risk factors for stroke: blood pressure (*idealHealthBP*; 1=ideal health, 0=not ideal health), smoking status (*idealHealthSMK*; 1=ideal health, 0=not ideal health), diabetes (*idealHealthDM*; 1=ideal health, 0=not ideal health), diet  (*idealHealthNutrition*; 1=ideal health, 0=not ideal health), physical activity (*idealHealthPA*; 1=ideal health, 0=not ideal health), obesity  (*idealHealthBMI*; 1=ideal health, 0=not ideal health), and high cholesterol  (*idealHealthChol*; 1=ideal health, 0=not ideal health). All of the idealHealth variables indicate *ideal* health… we were being asked to count the number of *not ideal* health indicators.
+
+The first model: We used Poisson regression to model the count variable created in 1 as a function of age (*age*; years), health insurance (*PrivatePublicIns*; 0=uninsured, 1=private insurance only, 2=public insurance only, 3=private and public insurances), and education status (*HSgrad*; 0=did not graduate high school, 1=graduated high school). Age is a significant predictor, with each additional year increasing the expected count of non-ideal health factors by a factor of about 0.8%. The coefficients for health insurance status (PrivatePublicIns_0 for uninsured, PrivatePublicIns_1 for private insurance only, and PrivatePublicIns_2 for public insurance only) were not statistically significant at the 0.05 level, suggesting that these categories do not have a distinct impact on the count of non-ideal health factors as compared to the reference category (PrivatePublicIns_3 for both private and public insurances). The coefficient for high school graduation status (HSgrad) was also not significant, showing that graduating from high school does not have a statistically significant effect on the count of non-ideal health factors. 
+
+The second model: We used negative binomial regression to model the count variable created in 1 as a function of age (*age*; years), health insurance (*PrivatePublicIns*; 0=uninsured, 1=private insurance only, 2=public insurance only, 3=private and public insurances), and education status (*HSgrad*; 0=did not graduate high school, 1=graduated high school). Age is a significant predictor, with each additional year increasing the expected count of non-ideal health factors by a factor of about 0.8%. The coefficients for health insurance status (PrivatePublicIns_0 for uninsured, PrivatePublicIns_1 for private insurance only, and PrivatePublicIns_2 for public insurance only) were not statistically significant at the 0.05 level, suggesting that these categories do not have a distinct impact on the count of non-ideal health factors as compared to the reference category (PrivatePublicIns_3 for both private and public insurances). The coefficient for high school graduation status (HSgrad) was also not significant, showing that graduating from high school does not have a statistically significant effect on the count of non-ideal health factors.  The negative binomial regression model shows that among the variables considered, only age is a significant predictor of the count of non-ideal health factors. Health insurance status and high school graduation status are not significant predictors in this model. 
+
+Zero-inflated models are models are made to manipulate datasets where the outcome variable has a lot of zero values. We use these models to deal with count data, where many observations are zero, and there's a need to account for excessive zero occurrences. The zero-inflated model can handle both structural zeros and excess zeros in a model. It helps tell the difference between zeros that are part of the process and those that are excessive. To determine if a zero-inflated model is necessary, we must look for the excess of zero counts in the data compared to what would be expected from a standard Poisson or Negative Binomial distribution. Zero-inflated models are particularly useful when the data generating process includes both true zeros (structural zeros) and zeros that result from a separate random process (sampling zeros). There are no zero counts in the dataset (Proportion of zeros: 0) and under a Poisson distribution we expect about 0.97% of the counts to be zero (Expected proportion of zeros (Poisson): 0.0097).
+
+

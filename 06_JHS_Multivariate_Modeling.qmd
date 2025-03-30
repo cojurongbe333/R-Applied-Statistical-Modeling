@@ -1,0 +1,393 @@
+---
+title: "Project 6"
+author: "Chantal Ojurongbe"
+format: html
+self-contained: true
+---
+
+
+#### This week you will be analyzing data from the Jackson Heart Study (JHS). You can find the data in the Week 1 module on Canvas. For full credit, you must include all code chunks and R output backing up your responses. Remember to set your seed in all problems for reproducibility purposes.
+```{r}
+
+library(glmnet)
+library(nnet)
+library(boot)
+library(fastDummies)
+library(haven)
+library(lindia)
+library(tidyverse)
+library(gsheet)
+library(DescTools)
+library(FSA)
+library(dplyr)
+library(ggplot2)
+library(car)
+library(agricolae)
+library(gmodels)
+library(dplyr)
+library(car)
+library(readr)
+library(broom)
+library(modelr)
+library(performance)
+library(GGally)
+library(emmeans)
+library(visreg)
+library(see)
+library(patchwork)
+library(caret)
+
+sas_data <- read_sas("analysis1.sas7bdat")
+
+head(sas_data)
+```
+
+#### 1. Use leave-one-out cross validation to determine which model fits better:
+```{r}
+dataP61 <- sas_data %>%
+  dplyr::select(sbp, age, HSgrad, BMI, diab3cat) %>%
+  na.omit()
+
+dataP61 <- dummy_columns(dataP61, select_columns = "diab3cat")
+
+n <- nrow(dataP61)  
+errors1a <- numeric(n)  
+errors1b <- numeric(n)  
+
+for (i in 1:n) {
+  train_set <- dataP61[-i, ]  
+  test_set <- dataP61[i, ]    
+
+  m1a <- lm(sbp ~ age + HSgrad + diab3cat_0 + diab3cat_1 + diab3cat_2 + BMI + diab3cat_0:age + diab3cat_1:age + diab3cat_2:age + diab3cat_0:HSgrad + diab3cat_1:HSgrad + diab3cat_2:HSgrad, data = train_set)
+  prediction1a <- predict(m1a, newdata = test_set)
+  errors1a[i] <- (test_set$sbp - prediction1a)^2
+
+   m1b <- lm(sbp ~ age + HSgrad + diab3cat_0 + diab3cat_1 + diab3cat_2 + BMI, data = train_set)
+  prediction1b <- predict(m1b, newdata = test_set)
+  errors1b[i] <- (test_set$sbp - prediction1b)^2
+}
+
+average_error1a <- mean(errors1a)
+average_error1b <- mean(errors1b)
+
+head(average_error1a)
+print(average_error1b)
+```
+
+Model 1a (With Interaction Terms Model): LOOCV MSE = 213.004283377641
+Model 1b (Without Interaction Terms Model): LOOCV MSE = 213.656974820241
+
+In comparing models using cross-validation, the model with the lower MSE is generally considered to have a better fit because it means the model's predictions are closer to the actual observed values. Model 1a, which includes interaction terms, has a lower MSE compared to Model 1b. Therefore, Model 1a is a better fit for the data.
+
+#### 1a. Systolic blood pressure (*sbp*; mmHg) as a function of age (*age*; years), education (*HSgrad*; 0=no, 1=yes), diabetic status (*diab3cat*; 0=non-diabetic, 1=pre-diabetic, 2=diabetic), body mass index (*bmi*, kg/m2), the interaction between diabetic status and age, and the interaction between diabetic status and education.
+
+[1] "Mean Squared Error for Model 1a: 213.004283377641"
+
+#### 1b. Systolic blood pressure (*sbp*; mmHg) as a function of age (*age*; years), education (*HSgrad*; 0=no, 1=yes), diabetic status (*diab3cat*; 0=non-diabetic, 1=pre-diabetic, 2=diabetic), body mass index (*bmi*, kg/m2).
+
+
+[1] "Mean Squared Error for Model 1b: 213.656974820241"
+
+#### 2. Consider the following model: diabetic status (*Diabetes*; 0=non-diabetic, 1=diabetic) as a function of age (*age*; years), weight (*weight*; kg), hypertension status (*HTN*; 0=normotensive, 1=hypertensive), health status as indicated by high density lipoproteins (*hdl3cat*; 0=poor health, 1=intermediate health, 2=ideal health), the interaction between weight and hypertension status, the interaction between weight and age, and the interaction between weight and health status as indicated by high density lipoproteins.
+
+```{r, echo = TRUE}
+dataP62 <- sas_data %>%
+  dplyr::select(sbp, age, HSgrad, BMI, diab3cat, hdl3cat, weight, HTN, Diabetes) %>%
+  na.omit()
+
+dataP62 <- dummy_columns(dataP62, select_columns = "hdl3cat")
+colnames(dataP62)
+
+m2_formula <- Diabetes ~ age + weight + HTN + hdl3cat_0 + hdl3cat_1 + hdl3cat_2+
+                 weight:HTN + weight:age + weight:hdl3cat_0 + weight:hdl3cat_1 + weight:hdl3cat_2
+
+m2 <- glm(m2_formula, data = dataP62, family = binomial())
+
+summary(m2)
+
+```
+
+#### 2a. Perform 2-fold cross validation.
+
+```{r, echo = TRUE}
+cv_error <- cv.glm(dataP62, m2, K=2)
+cv_error$delta
+
+set.seed(333)  
+shuffled_data <- dataP62[sample(nrow(dataP62)), ]
+split_index <- round(nrow(shuffled_data) / 2)
+
+train_set_1 <- shuffled_data[1:split_index, ]
+test_set_1 <- shuffled_data[(split_index + 1):nrow(shuffled_data), ]
+
+train_set_2 <- shuffled_data[(split_index + 1):nrow(shuffled_data), ]
+test_set_2 <- shuffled_data[1:split_index, ]
+
+fit_and_evaluate <- function(train_set, test_set) {
+  m2 <- glm(Diabetes ~ age + weight + HTN + hdl3cat_0 + hdl3cat_1 + hdl3cat_2+
+                 weight:HTN + weight:age + weight:hdl3cat_0 + weight:hdl3cat_1 + weight:hdl3cat_2,
+               data = train_set, family = binomial())
+  predictions <- round(predict(m2, newdata = test_set, type = "response"))
+  accuracy <- mean(predictions == test_set$Diabetes)
+  return(accuracy)
+}
+
+accuracy_fold_1 <- fit_and_evaluate(train_set_1, test_set_1)
+accuracy_fold_2 <- fit_and_evaluate(train_set_2, test_set_2)
+
+average_accuracy <- mean(c(accuracy_fold_1, accuracy_fold_2))
+print(paste("Average accuracy over 2 folds:", average_accuracy))
+```
+
+#### 2b. Perform 5-fold cross validation.
+
+```{r, echo = TRUE}
+cv_error <- cv.glm(dataP62, m2, K=5)
+cv_error$delta
+
+set.seed(333)  
+folds2b <- createFolds(dataP62$Diabetes, k = 5)
+
+accuracy_results <- numeric(length(folds2b))
+
+for(i in 1:length(folds2b)) {
+  test_indices2b <- folds2b[[i]]
+  test_set2b <- dataP62[test_indices2b, ]
+  train_set2b <- dataP62[-test_indices2b, ]
+
+  predictions <- round(predict(m2, newdata = test_set2b, type = "response"))
+  accuracy_results[i] <- mean(predictions == test_set2b$Diabetes)
+}
+
+average_accuracy <- mean(accuracy_results)
+print(paste("Average accuracy over 5 folds:", average_accuracy))
+```
+
+#### 2c. Perform 10-fold cross validation.
+
+```{r, echo = TRUE}
+
+cv_error <- cv.glm(dataP62, m2, K=10)
+cv_error$delta
+
+set.seed(333) 
+folds2c <- createFolds(dataP62$Diabetes, k = 10)
+
+accuracy_results <- numeric(length(folds2c))
+
+for(i in 1:length(folds2c)) {
+  test_indices2c <- folds2c[[i]]
+  test_set2c <- dataP62[test_indices2c, ]
+  train_set2c <- dataP62[-test_indices2c, ]
+
+  predictions <- round(predict(m2, newdata = test_set2c, type = "response"))
+  accuracy_results[i] <- mean(predictions == test_set2c$Diabetes)
+}
+
+average_accuracy <- mean(accuracy_results)
+print(paste("Average accuracy over 10 folds:", average_accuracy))
+```
+
+#### 2d. Perform 25-fold cross validation.
+
+```{r, echo = TRUE}
+cv_error <- cv.glm(dataP62, m2, K=25)
+cv_error$delta
+
+set.seed(333)  
+folds2d <- createFolds(dataP62$Diabetes, k = 25)
+
+accuracy_results <- numeric(length(folds2d))
+
+for(i in 1:length(folds2d)) {
+  test_indices2d <- folds2d[[i]]
+  test_set2d <- dataP62[test_indices2d, ]
+  train_set2d <- dataP62[-test_indices2d, ]
+
+  predictions <- round(predict(m2, newdata = test_set2d, type = "response"))
+  accuracy_results[i] <- mean(predictions == test_set2d$Diabetes)
+}
+
+average_accuracy <- mean(accuracy_results)
+print(paste("Average accuracy over 25 folds:", average_accuracy))
+```
+
+#### 2e. Perform 50-fold cross validation.
+
+```{r, echo = TRUE}
+cv_error <- cv.glm(dataP62, m2, K=50)
+cv_error$delta
+
+set.seed(333)  
+folds2e <- createFolds(dataP62$Diabetes, k = 50)
+
+accuracy_results <- numeric(length(folds2e))
+
+for(i in 1:length(folds2e)) {
+
+  test_indices2e <- folds2e[[i]]
+  test_set2e <- dataP62[test_indices2e, ]
+  train_set2e <- dataP62[-test_indices2e, ]
+
+  predictions <- round(predict(m2, newdata = test_set2e, type = "response"))
+  accuracy_results[i] <- mean(predictions == test_set2e$Diabetes)
+}
+
+average_accuracy <- mean(accuracy_results)
+print(paste("Average accuracy over 50 folds:", average_accuracy))
+```
+
+#### 2f. Perform 100-fold cross validation.
+
+```{r, echo = TRUE}
+cv_error <- cv.glm(dataP62, m2, K=100)
+cv_error$delta
+
+set.seed(333)  
+folds2f <- createFolds(dataP62$Diabetes, k = 100)
+
+accuracy_results <- numeric(length(folds2f))
+
+for(i in 1:length(folds2f)) {
+  test_indices2f <- folds2f[[i]]
+  test_set2f <- dataP62[test_indices2f, ]
+  train_set2f <- dataP62[-test_indices2f, ]
+
+  predictions <- round(predict(m2, newdata = test_set2f, type = "response"))
+  accuracy_results[i] <- mean(predictions == test_set2f$Diabetes)
+}
+
+average_accuracy <- mean(accuracy_results)
+print(paste("Average accuracy over 100 folds:", average_accuracy))
+```
+
+#### 2g. What did you observe, if anything, about the CV values?
+
+The model's average accuracy is consistent across the different fold numbers. The variations are small, showing that the model is valid across different subsets of the data. There's a slight trend of increasing accuracy as the number of folds increases. This could be due to the model being tested more stringently and on more subsets of data in higher-fold validations. However, the increase in accuracy is very small. The increase in accuracy from increasing the number of folds becomes less obvious as the number of folds increases. The small gains in accuracy with higher folds suggest that a moderate number of folds (like 10 or 25) might be best for efficient and effective model validation.
+
+#### 2h. What did you observe, if anything, about the processing time?
+
+Higher folds provide a more thorough evaluation by using more and smaller test sets, they also require more computation time. The increase in accuracy does not seem substantial enough to warrant the increased computational burden, especially beyond 25 folds.
+
+#### 3. Use 25-fold cross validation to determine which model fits better:
+```{r}
+dataP63 <- sas_data %>%
+  dplyr::select(sbp, age, HSgrad, BMI, diab3cat, hdl3cat, weight, HTN, Diabetes, idealHealthBP, idealHealthSMK, idealHealthDM, 
+                                                idealHealthNutrition, idealHealthPA, 
+                                                idealHealthBMI, idealHealthChol, PrivatePublicIns) %>%
+  na.omit()
+
+dataP63$idealHealthTotal <- rowSums(dataP63[, c("idealHealthBP", "idealHealthSMK", "idealHealthDM", 
+                                                "idealHealthNutrition", "idealHealthPA", 
+                                                "idealHealthBMI", "idealHealthChol")], na.rm = TRUE)
+
+head(dataP63$idealHealthTotal)
+
+dataP63 <- dummy_cols(dataP63, select_columns = "PrivatePublicIns")
+colnames(dataP63)
+
+control <- trainControl(method = "cv", number = 25)
+
+m3a <- train(idealHealthTotal ~ age + PrivatePublicIns_0 + PrivatePublicIns_1 + PrivatePublicIns_2 + PrivatePublicIns_3 + HSgrad + age:PrivatePublicIns_1 + age:PrivatePublicIns_2 + age:PrivatePublicIns_0 + age:PrivatePublicIns_3, 
+                 data = dataP63, method = "glm", trControl = control)
+
+m3b <- train(idealHealthTotal ~ age + PrivatePublicIns_0 + PrivatePublicIns_1 + PrivatePublicIns_2 + PrivatePublicIns_3 + HSgrad, 
+                 data = dataP63, method = "glm", trControl = control)
+
+results3a <- m3a$results
+results3b <- m3b$results
+
+head(results3a)
+head(results3b)
+```
+
+Model 3a: RMSE = 1.081846
+Includes significant predictors and interaction terms.
+Some coefficients not defined due to singularities.
+Model 3b: RMSE = 1.089738
+Excludes interaction terms, leading to slightly higher MSE.
+
+
+Model 1 has a slightly lower RMSE, indicating better performance in terms of prediction accuracy.
+Model 1, which includes the interaction between age and health insurance types, fits the data slightly better than Model 2, which does not include these interaction terms.
+
+#### 3a. Modeling the number of ideal health indicators (use blood pressure (*idealHealthBP*; 1=ideal health, 0=not ideal health), smoking status (*idealHealthSMK*; 1=ideal health, 0=not ideal health), diabetes (*idealHealthDM*; 1=ideal health, 0=not ideal health), diet  (idealHealthNutrition; 1=ideal health, 0=not ideal health), physical activity (*idealHealthPA*; 1=ideal health, 0=not ideal health), obesity  (*idealHealthBMI*; 1=ideal health, 0=not ideal health), and high cholesterol  (*idealHealthChol*; 1=ideal health, 0=not ideal health)) as a function of age (*age*; years), health insurance (*PrivatePublicIns*; 0=uninsured, 1=private insurance only, 2=public insurance only, 3=private and public insurances), education status (*HSgrad*; 0=did not graduate high school, 1=graduated high school), and the interaction between age and health insurance.
+
+Model 3a: RMSE = 1.081846
+
+#### 3b. Modeling the number of ideal health indicators (use blood pressure (*idealHealthBP*; 1=ideal health, 0=not ideal health), smoking status (*idealHealthSMK*; 1=ideal health, 0=not ideal health), diabetes (*idealHealthDM*; 1=ideal health, 0=not ideal health), diet  (idealHealthNutrition; 1=ideal health, 0=not ideal health), physical activity (*idealHealthPA*; 1=ideal health, 0=not ideal health), obesity  (*idealHealthBMI*; 1=ideal health, 0=not ideal health), and high cholesterol  (*idealHealthChol*; 1=ideal health, 0=not ideal health)) as a function of age (*age*; years), health insurance (*PrivatePublicIns*; 0=uninsured, 1=private insurance only, 2=public insurance only, 3=private and public insurances), education status (*HSgrad*; 0=did not graduate high school, 1=graduated high school).
+
+Model 3b: RMSE = 1.089738
+
+#### 4. Pick the results from either Q1 or Q3 to write a summary paragraph for. This paragraph should outline the methodology + results and be readable for your supervisor (not a statistician or data scientist). 
+
+Q3: 
+
+Methodology
+
+Data Preparation:
+We selected relevant variables from the sas_data dataset: blood pressure, age, high school graduation status, BMI, diabetes status, HDL cholesterol levels, weight, hypertension, diabetes, seven ideal health indicators (blood pressure, smoking status, diabetes, nutrition, physical activity, BMI, cholesterol), and health insurance type.
+We removed the missing values (na.omit()).
+We created a new variable idealHealthTotal, representing the sum of the seven ideal health indicators. Then converted PrivatePublicIns into dummy variables (dummy_cols()).
+
+Modeling:
+First Model (m3a): A glm model with a Poisson distribution was used. The model includes the variables: age, health insurance type (four dummy variables), high school graduation status, and interactions between age and each health insurance type.
+Second Model (m3b): Similar to the first, but without the interaction terms between age and health insurance type.
+
+Results:
+
+First Model (m3a):
+Average MSE: 1.081846
+Significant predictors include age and some insurance types.
+The interaction between age and insurance types shows some significance.
+
+Second Model (m3b):
+Average MSE: 1.089738
+Age and some insurance types are significant predictors.
+The model does not include interaction terms, which slightly increased the average MSE compared to the first model.
+
+
+The models aim is to understand how age, health insurance, and education status influence the total number of ideal health indicators in an individual. The interaction between age and health insurance in the first model suggests that the effect of age on health varies with different types of insurance coverage. The slightly lower MSE in model 3a indicates that including interaction terms between age and insurance type provides a little better fit. This shows information on how demographic factors affect the overall health status, as represented by the ideal health indicators. The use of cross-validation helps in assessing the model's performance and ensuring that the results are generalizable.
+
+#### 5. Required for graduate students / extra credit for undergraduate students: this is a challenge question! If you cannot figure it out, please document the research you performed when searching for the answer and what you tried in terms of R code. Use leave-one-out cross validation to determine which model is better:
+```{r}
+dataP65 <- sas_data %>%
+  dplyr::select(age, weight, HTN, hdl3cat, diab3cat) %>%
+  na.omit() %>%
+  mutate(diab3cat = as.factor(diab3cat),
+         HTN = as.factor(HTN),
+         hdl3cat = as.factor(hdl3cat))
+
+formula_5a <- diab3cat ~ age + weight + HTN + hdl3cat + age:hdl3cat + weight:age
+formula_5b <- diab3cat ~ age + weight + HTN + hdl3cat
+
+
+loocv_error_rate <- function(formula, data) {
+  error_rates <- numeric(nrow(data))
+  
+  for (i in 1:nrow(data)) {
+    train_data <- data[-i, ]
+    test_data <- data[i, , drop = FALSE]
+    fit <- multinom(formula, data = train_data)
+    prediction <- predict(fit, newdata = test_data)
+    error_rates[i] <- as.integer(prediction != test_data$diab3cat)
+  }
+  
+  mean(error_rates)
+}
+
+error_rate_5a <- loocv_error_rate(formula_5a, dataP65)
+error_rate_5b <- loocv_error_rate(formula_5b, dataP65)
+
+head(paste("LOOCV Error Rate for Model 5a:", error_rate_5a))
+head(paste("LOOCV Error Rate for Model 5b:", error_rate_5b))
+```
+
+Both models have very similar error rates, with Model 5a (including interaction terms) having a marginally lower error rate than Model 5b. This suggests that Model 5a fits the data a little better than Model 5b.
+
+#### 5a. Model diabetic status (*diab3cat*; 0=non-diabetic, 1=pre-diabetic, 2=diabetic) as a function of age (*age*; years), weight (*weight*; kg), hypertension (*HTN*; 1=yes, 0=no), high density lipoprotein (*hdl3cat*; 0=poor health, 1=intermediate health, 2=ideal health), the interaction between high density lipoprotein and age, and the interaction between weight and age. 
+[1] "LOOCV Error Rate for Model 5a: 0.461507128309572"
+
+#### 5b. Model diabetic status (*diab3cat*; 0=non-diabetic, 1=pre-diabetic, 2=diabetic) as a function of age (*age*; years), weight (*weight*; kg), hypertension (*HTN*; 1=yes, 0=no), and high density lipoprotein (*hdl3cat*; 0=poor health, 1=intermediate health, 2=ideal health).
+
+[1] "LOOCV Error Rate for Model 5b: 0.461914460285132"

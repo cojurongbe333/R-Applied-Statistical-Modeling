@@ -1,0 +1,483 @@
+---
+title: "Project 2"
+author: "Chantal Ojurongbe"
+format: html
+self-contained: true
+---
+
+#### This week you will be analyzing data from the Jackson Heart Study (JHS), expanding on last week's project. You can find the data in the Week 1 module on Canvas. For full credit, you must include all code chunks and R output backing up your responses.
+```{r, echo = TRUE}
+
+library(fastDummies)
+library(haven)
+library(lindia)
+library(tidyverse)
+library(gsheet)
+library(DescTools)
+library(FSA)
+library(dplyr)
+library(ggplot2)
+library(car)
+library(agricolae)
+library(gmodels)
+library(dplyr)
+library(car)
+library(readr)
+library(broom)
+library(modelr)
+library(performance)
+library(GGally)
+library(emmeans)
+library(visreg)
+library(see)
+library(patchwork)
+library(caret)
+
+sas_data <- read_sas("analysis1.sas7bdat")
+
+head(sas_data)
+```
+#### 1a. Model systolic blood pressure (*sbp*; mmHg) as a function of age (*age*; years), education (*HSgrad*; 0=no, 1=yes), and body mass index (*bmi*; kg/m<sup>2</sup>), and the following interactions: body mass index $\times$ age and body mass index $\times$ education. Remember to report the resulting model.
+
+```{r, echo = TRUE}
+data1 <- as_tibble(sas_data %>% dplyr::select(sbp,
+age, HSgrad, BMI))%>%
+  na.omit()
+
+head(data1)
+
+
+m1 <- lm(sbp ~ age + HSgrad + BMI + BMI:age + BMI:HSgrad,  data = data1,
+         na.action = na.exclude)
+
+summary(m1)
+
+coefficients(m1)
+```
+yhat = 74.75 + 0.87age - 2.77Hsgrad + 0.89BMI - 0.01(age*BMI) + 0.06(HSgrad*BMI)
+
+#### 1b. Perform the appropriate hypothesis test to determine if the interaction between body mass index and age is significant Test at the $\alpha=0.05$ level.
+
+```{r, echo = TRUE}
+analytic1b <- data1 %>%
+  dplyr::select(sbp, age, HSgrad, BMI) %>%
+  na.omit()
+
+
+full_1b <- lm(sbp ~ age + HSgrad + BMI + BMI:age + BMI:HSgrad, data = analytic1b)
+reduced_1b <- lm(sbp ~ age + HSgrad + BMI + BMI:HSgrad, data = analytic1b)
+
+anova_result <- anova(reduced_1b, full_1b)
+print(anova_result)
+```
+Hypotheses
+
+H0 : β1 = . . . = βk = 0, The interaction between BMI and age has no significant effect on sbp.
+H1 : at least one βi ̸= , The interaction between BMI and age has a significant effect on sbp.
+
+Test Statistic and p-Value
+F0: 14.237
+p: 0.0001647
+
+Rejection Region
+Reject H0 since p < α. This suggests that the interaction between BMI and age is significant in predicting sbp.
+
+The interaction between body mass index and age (overall) is significant since the p-value < 0.001. So, we have a right to look at the individual terms. If we look at the individual terms, the interaction between BMI and age is significant since the p-value < 0.001 which is < 0.05 alpha test level. 
+
+
+#### 1c. Perform the appropriate hypothesis test to determine if the interaction between body mass index and education is significant Test at the $\alpha=0.05$ level.
+
+```{r, echo = TRUE}
+analytic1b <- data1 %>%
+  dplyr::select(sbp, age, HSgrad, BMI) %>%
+  na.omit()
+
+
+full_1c <- lm(sbp ~ age + HSgrad + BMI + BMI:age + BMI:HSgrad, data = analytic1b)
+reduced_1c <- lm(sbp ~ age + HSgrad + BMI + BMI:age, data = analytic1b)
+
+anova_result <- anova(reduced_1c, full_1c)
+print(anova_result)
+```
+Hypotheses
+
+H0 : β1 = . . . = βk = 0, The interaction between BMI and education (HSgrad) has no significant effect on sbp.
+H1 : at least one βi ̸= ,The interaction between BMI and education (HSgrad) has a significant effect on sbp.
+
+Test Statistic and p-Value
+F0: 0.2029
+p: 0.6524
+
+Rejection Region
+Reject H0 since p > α. This suggests that the interaction between BMI and education (HSgrad) has no significant effect on sbp.
+
+
+#### 1d. Create the following models (i.e., plug in the following values and algebraically simplify): (1) body mass index of 32, (2) body mass index of 27, and (3) body mass index of 25.  Remember to report the resulting models. 
+
+yhat = 74.75 + 0.87age - 2.77Hsgrad + 0.89BMI - 0.01(age*BMI) + 0.06(HSgrad*BMI)
+yhat = 74.75 + 0.87age - 2.77Hsgrad + 0.89(32) - 0.01(32)*age + 0.06(32)*HSgrad
+yhat = 74.75 + 0.87age - 2.77HSgrad + 28.48 - .32age + 1.92HSgrad
+yhat = 103.23 + .55age - 0.85HSgrad
+
+yhat = 74.75 + 0.87age - 2.77Hsgrad + 0.89(27) - 0.01(27)*age + 0.06(27)*HSgrad
+yhat = 98.78 + 0.6age - 1.15HSgrad
+
+yhat = 74.75 + 0.87age - 2.77Hsgrad + 0.89(25) - 0.01(25)*age + 0.06(25)*HSgrad
+yhat = 97 + 0.62age - 1.27HSgrad
+
+#### 1e. Provide brief interpretations for the slopes of the predictors for the models in 1d.
+yhat = 103.23 + .55age - 0.85HSgrad
+A one-year increase in age is associated with a 0.55 unit increase in the predicted value of SBP of sbp, while keeping HSgrad constant. An increase in HSgrad is associated with a 0.85 unit decrease in the predicted value of SBP of sbp, while keeping age constant.
+
+yhat = 98.78 + 0.6age - 1.15HSgrad
+A one-year increase in age is associated with a 0.6 unit increase in the predicted value of SBP of sbp, while keeping HSgrad constant.  An increase in education (HSgrad) is associated with a 1.15 unit decrease in the predicted value of SBP of sbp, while keeping age constant.
+
+yhat = 97 + 0.62age - 1.27HSgrad
+A one-year increase in age is associated with a 0.62 unit increase in the predicted value of SBP of sbp, while keeping education HSgrad constant. An increase in HSgrad is associated with a 1.27 unit decrease in the predicted value of SBP of sbp, while keeping age constant.
+
+#### 1f. Construct an appropriate data visualization to help with explaining the model results. Systolic blood pressure should be on the y-axis, age should be on the x-axis, and use the regression lines constructed in 1d.
+
+```{r, echo = TRUE}
+data1 <- data1 %>% mutate(
+   m1_bmi25 = 97 + 0.62*age,
+   m1_bmi27 = 98.78 + 0.6*age,
+   m1_bmi32 = 103.23 + 0.55*age
+)
+
+ p1 <- ggplot(data1, aes(x = age, y = sbp)) +
+  geom_point(size = 1) +
+ geom_line(aes(y = m1_bmi25), color = "#F8766D", linetype = "solid") +
+geom_line(aes(y = m1_bmi27), color = "#00BA38", linetype = "solid") +
+geom_line(aes(y = m1_bmi32), color = "#619CFF", linetype = "solid") +
+xlab("Age in Years") +
+ylab("Systolic Blood Pressure")
+
+print(p1)
+```
+
+#### 1g. Graphically assess the assumptions implied by used the normal distribution.
+```{r, echo = TRUE}
+almost_sas <- function(aov.results) {
+  aov_residuals <- residuals(aov.results)
+  par(mfrow = c(2, 2))
+  plot(aov.results, which = 1)
+  hist(aov_residuals)
+  plot(aov.results, which = 2)
+  aov_residuals5.4 <- residuals(aov.results)
+  plot(density(aov_residuals5.4))
+  hist(aov_residuals5.4)
+}
+
+sasmodel <- aov(sbp ~ age, data = data1)
+almost_sas(sasmodel)
+
+check_model(m1)
+
+```
+Normality is not broken.
+
+#### 1h. Check for outliers. How many observations are outliers?
+```{r}
+data1 <- data1 %>%
+  mutate(outlier = abs(rstandard(m1))>2.5)
+
+data1 %>% count(outlier)
+
+outlier1h <- data1 %>% 
+                filter(outlier == TRUE)
+print(outlier1h)
+```
+There are 55 outlier observations.
+
+#### 1i. Check for influential/leverage points. How many observations should we investigate?
+```{r}
+
+p1i <- gg_cooksd(m1) + theme_bw()
+print(p1i)
+
+ data1$rownumber = 1:nrow(data1)
+ 
+ data1 %>% filter(rownumber == 428) %>% select(outlier)
+ 
+  data1$rownumber = 1:nrow(data1)
+ 
+ data1 %>% filter(rownumber == 22) %>% select(outlier)
+
+```
+I would investigate points: 22, and 428. 
+22 is an influential and leverage point. 428 is not an influential and leverage point.
+
+#### 1j. Check for multicollinearity. Are there any problem predictors?
+```{r}
+
+m1 <- lm(sbp ~ age + HSgrad + BMI + BMI:age + BMI:HSgrad, data = data1, na.action = na.exclude)
+
+vif_values <- vif(m1)
+print(vif_values)
+
+alias(m1)
+
+m1j <- lm(sbp ~ age + HSgrad + BMI, data = data1, na.action = na.exclude)
+
+vif_values1j <- vif(m1j)
+print(vif_values1j)
+
+```
+
+This shows that the inclusion of interaction terms in Model 1 contributes significantly to multicollinearity, as evidenced by the high VIF values for all predictors. In contrast, m1j, which excludes these interaction terms, shows VIF values well below the threshold of 5-10, suggesting no concerning multicollinearity among the predictors. But this could only happen if the interaction terms BMI:age and BMI:HSgrad are removed.
+
+#### 2a. Model systolic blood pressure (*sbp*; mmHg) as a function of age (*age*; years), education (*HSgrad*; 0=no, 1=yes), and health status as defined by body mass index (*bmi3cat*; 0=poor health, 1=intermediate health, 2=ideal health), and the following interactions: health status as defined by body mass index $\times$ age and health status as defined by body mass index $\times$ education. Remember to report the resulting model.
+
+```{r, echo = TRUE}
+data2 <- as_tibble(sas_data %>% dplyr::select(sbp,
+age, HSgrad, BMI3cat))%>%
+  na.omit()
+
+head(data2)
+
+data2 %>% count(BMI3cat)
+
+data2 <- dummy_cols(data2, select_columns = "BMI3cat")
+colnames(data2)
+
+m2 <- lm(sbp ~ age + HSgrad + BMI3cat_0:age + BMI3cat_1:age + BMI3cat_2:age + BMI3cat_0:HSgrad + BMI3cat_1:HSgrad + BMI3cat_2:HSgrad,  data = data2,
+         na.action = na.exclude)
+summary(m2)
+
+```
+yhat = 103.32 + 0.44age - 3.21HSgrad - 0.035age*BMI3cat_0 + 0.042age*BMI3cat_1 + 5.30HSgrad*BMI3cat_0 - 1.97HSgrad*BMI3cat_1
+
+#### 2b. Perform the appropriate hypothesis test to determine if the interaction between health status as defined by body mass index and age is significant. Test at the $\alpha=0.05$ level.
+
+```{r, echo = TRUE}
+analytic2b <- data2 %>%
+  dplyr::select(sbp, age, HSgrad, BMI3cat) %>%
+  na.omit()
+
+analytic2b %>% count(BMI3cat)
+
+analytic2b <- dummy_cols(data2, select_columns = "BMI3cat")
+colnames(analytic2b)
+
+full_2b <- lm(sbp ~ age + HSgrad + BMI3cat_0:age + BMI3cat_1:age + BMI3cat_2:age + BMI3cat_0:HSgrad + BMI3cat_1:HSgrad + BMI3cat_2:HSgrad, data = analytic2b)
+reduced_2b <- lm(sbp ~ age + HSgrad + BMI3cat_0:HSgrad + BMI3cat_1:HSgrad + BMI3cat_2:HSgrad, data = analytic2b)
+
+anova_result <- anova(reduced_2b, full_2b)
+print(anova_result)
+```
+
+Hypotheses
+
+H0 : β1 = . . . = βk = 0, The interaction between BMI3cat and age has no significant effect on sbp.
+H1 : at least one βi ≠ 0, The interaction between BMI3cat and age has a significant effect on sbp. 
+
+Test Statistic and p-Value
+F0: 5.207
+p: 0.005534
+
+Rejection Region
+Reject H0 since p < α. This suggests that the interaction between health status (defined by BMI3cat) and age is significant in predicting sbp.
+
+The interaction between health status as defined by body mass index and age (overall) is significant since the p-value < 0.05, which is the alpha test level. So, we have a right to look at the individual terms. If we look at the individual terms, the interaction between BMI and HSgrad is not significant since the p-value = 0.31 which is > 0.05 alpha test level.
+
+#### 2c. Perform the appropriate hypothesis test to determine if the interaction between health status as defined by body mass index and education is significant. Test at the $\alpha=0.05$ level.
+
+```{r, echo = TRUE}
+analytic2c <- data2 %>%
+  dplyr::select(sbp, age, HSgrad, BMI3cat) %>%
+  na.omit()
+
+analytic2c %>% count(BMI3cat)
+
+analytic2c <- dummy_cols(data2, select_columns = "BMI3cat")
+colnames(analytic2b)
+
+full_2c <- lm(sbp ~ age + HSgrad + BMI3cat_0:age + BMI3cat_1:age + BMI3cat_2:age + BMI3cat_0:HSgrad + BMI3cat_1:HSgrad + BMI3cat_2:HSgrad, data = analytic2c)
+reduced_2c <- lm(sbp ~ age + HSgrad + BMI3cat_0:age + BMI3cat_1:age + BMI3cat_2:age, data = analytic2c)
+
+anova_result <- anova(reduced_2c, full_2c)
+print(anova_result)
+```
+
+Hypotheses
+
+H0 : β1 = . . . = βk = 0, The interaction between BMI3cat and HSgrad has no significant effect on sbp.
+H1 : at least one βi ≠ 0, The interaction between BMI3cat and HSgrad has a significant effect on sbp.  
+
+Test Statistic and p-Value
+F0: 13.575
+p: 1.363e-06
+
+Rejection Region
+Reject H0 since p < α. This suggests that the interaction between health status (BMI3cat) and education (HSgrad) is significant in predicting sbp.
+
+The interaction between health status as defined by body mass index and education (overall) is significant since the p-value < 0.05, which is the alpha test level. So, we have a right to look at the individual terms. If we look at the individual terms, the interaction between BMI3cat_0 and HSgrad is significant since the p-value < 0.005 which is < 0.05 alpha test level. The interaction between BMI3cat_1 and HSgrad is not significant since the p-value = 0.36 which is > 0.05 alpha test level.
+
+#### 2d. Create the following models (i.e., plug in the following values and algebraically simplify): (1) poor health (bmi3cat = 0), (2) intermediate health (bmi3cat = 1), and (3) ideal health (bmi3cat = 2).  Remember to report the resulting models. 
+yhat = 103.32 + 0.44age - 3.21HSgrad - 0.035ageBMI3cat_0 + 0.042ageBMI3cat_1 + 5.30HSgradBMI3cat_0 - 1.97HSgradBMI3cat_1
+
+Poor health: 
+yhat = 103.32 + 0.44age - 3.21HSgrad - 0.035age + 0.042age + 5.30HSgrad - 1.97HSgrad 
+yhat = 103.32 + 0.44age - 3.21HSgrad + 5.30HSgrad - 0.035age yhat = 103.32 + 0.042age − 5.18HSgrad
+yhat = 103.32 + 0.44age - 3.21HSgrad
+
+Intermediate health: 
+yhat = 103.32 + 0.44age − 3.21HSgrad − 0.035age0 + 0.042age + 5.30HSgrad0 − 1.97HSgrad 
+yhat = 103.32 + 0.44age − 3.21HSgrad + 0.042age − 1.97HSgrad 
+yhat = 103.285 + 0.405age - 5.18HSgrad
+
+Ideal health: 
+yhat = 103.32 + 0.44age − 3.21HSgrad − 0.035age0 + 0.042age0 + 5.30HSgrad0 − 1.97HSgrad0 
+yhat = 103.32 + 0.44age − 3.21HSgrad
+
+
+#### 2e. Provide brief interpretations for the slopes of the predictors from the models in 2d.
+Poor health
+For age (0.44) suggests that for each unit increase in age, the predicted value of SBP is expected to increase by 0.44 units, all other variables constant.For HSgrad (-3.21) suggests that for each unit increase in HSgrad, the predicted value of SBP is expected to decrease by 3.21 units, all other variables constant.
+
+Intermediate health
+For age (0.44) still suggests that for each unit increase in age, the predicted value of SBP is expected to increase by 0.44 units, all other variables constant. For HSgrad (-1.97) suggests that for each unit increase in HSgrad, the predicted value of SBP is expected to decrease by 1.97 units, all other variables constant. The interaction term with HSgrad (5.30) no longer has an effect since the interaction variable BMI3cat_0 is set to 0.
+
+Ideal health
+For age (0.44) suggests that for each unit increase in age, the predicted value of SBP is expected to increase by 0.44 units, all other variables constant. The coefficient for HSgrad (-3.21) suggests that for each unit increase in HSgrad, the predicted value of SBP is expected to decrease by 3.21 units, all other variables constant. All the interaction terms with age and HSgrad are set to 0, which means they have no effect on the predicted value of SBP. As a result, only the main effects of age and HSgrad remain.
+
+#### 2f. Construct an appropriate data visualization to help with explaining the model results. Systolic blood pressure should be on the y-axis, age should be on the x-axis, and use the regression lines constructed in 2d.
+
+```{r, echo = TRUE}
+data2 <- data2 %>% mutate(
+   m1_bmi_0 = 103.32 + 0.042*age,
+   m1_bmi_1 = 103.285 + 0.405*age,
+   m1_bmi_2 = 103.32 + 0.44*age
+)
+
+ p2 <- ggplot(data2, aes(x = age, y = sbp)) +
+  geom_point(size = 1) +
+  geom_line(aes(y = m1_bmi_0), color = "#F8766D", linetype = "solid") +
+  geom_line(aes(y = m1_bmi_1), color = "#00BA38", linetype = "solid") +
+  geom_line(aes(y = m1_bmi_2), color = "#619CFF", linetype = "solid") +
+  xlab("Age in Years") +
+  ylab("Systolic Blood Pressure")
+
+print(p2)
+```
+
+#### 2g. Graphically assess the assumptions implied by used the normal distribution.
+```{r, echo = TRUE}
+almost_sas <- function(aov.results) {
+  aov_residuals <- residuals(aov.results)
+  par(mfrow = c(2, 2))
+  plot(aov.results, which = 1)
+  hist(aov_residuals)
+  plot(aov.results, which = 2)
+  aov_residuals5.4 <- residuals(aov.results)
+  plot(density(aov_residuals5.4))
+  hist(aov_residuals5.4)
+}
+
+sasmodel <- aov(sbp ~ age + HSgrad + BMI3cat, data = data2)
+almost_sas(sasmodel)
+
+check_model(m2)
+```
+Normality is not broken.
+
+#### 2h. Check for outliers. How many observations are outliers?
+```{r, echo = TRUE}
+data2 <- data2 %>%
+  mutate(outlier = abs(rstandard(m2))>2.5)
+
+data2 %>% count(outlier)
+
+outlier2h <- data2 %>% 
+                filter(outlier == TRUE)
+print(outlier2h)
+```
+There are 53 outlier observations.
+
+#### 2i. Check for influential/leverage points. How many observations should we investigate?
+```{r, echo = TRUE}
+p2i <- gg_cooksd(m2) + theme_bw()
+ print(p2i)
+ 
+ data2$rownumber = 1:nrow(data2)
+ 
+ data2 %>% filter(rownumber == 1054) %>% dplyr::select(outlier)
+ 
+  data2$rownumber = 1:nrow(data2)
+ 
+ data2 %>% filter(rownumber == 640) %>% dplyr::select(outlier)
+ 
+```
+I would investigate points: 640, and 1054. 1054 is an influential and leverage point. 640 is not an influential and leverage point. 
+
+#### 2j. Check for multicollinearity. Are there any problem predictors?
+```{r, echo = TRUE}
+
+m2j <- lm(sbp ~ age + HSgrad + BMI3cat_0:age + BMI3cat_1:age + BMI3cat_0:HSgrad + BMI3cat_1:HSgrad,  data = data2,
+         na.action = na.exclude)
+
+vif(m2j)
+
+m2j1 <- lm(sbp ~ age + HSgrad + BMI3cat_0:age + BMI3cat_1:age + BMI3cat_0:HSgrad,  data = data2,
+         na.action = na.exclude)
+
+vif(m2j1)
+
+m2j2 <- lm(sbp ~ age + HSgrad + BMI3cat_0:age + BMI3cat_1:age,  data = data2,
+         na.action = na.exclude)
+
+vif(m2j2)
+
+```
+
+BMI3cat_2 was removed as a reference group. However, the vif values for almost all the predictors still showed cause for concern. The interaction terms, particularly those involving HSgrad, are contributing to multicollinearity in the models. This still left with vif values > 2. Simplifying the model by removing these interaction terms effectively reduces multicollinearity.
+
+#### 3. Write a summary paragraph that (1) summarizes the results of each model, (2) compare and contrasts the results. This paragraph can be more technical in nature (i.e., you are writing it for me, a professional statistician/data scientist).
+Model 1 data: Modeling SBP as a function of age, education(HSgrad), BMI and the following interactions: BMI * age and BMI * HSgrad. The resulting model is yhat = 74.75 + 0.87age - 2.77Hsgrad + 0.89BMI - 0.01(age*BMI) + 0.06(HSgrad*BMI). The interaction between body mass index and age (overall) is significant since the p-value < 0.001. So, we have a right to look at the individual terms. If we look at the individual terms, the interaction between BMI and age is significant since the p-value < 0.001 which is < 0.05 alpha test level. The interaction between body mass index and education (overall) is significant since the p-value < 0.001. So, we have a right to look at the individual terms. If we look at the individual terms, the interaction between BMI and HSgrad is not significant since the p-value = 0.065 which is > 0.05 alpha test level. There are 55 outlier observations. 22 is an influential and leverage point. 428 appears to be but, is not an influential and leverage point.
+
+Model 2 data: Modeling SBP as a function of age, education, and health status as defined by body mass index (*bmi3cat*; 0=poor health, 1=intermediate health, 2=ideal health), and the following interactions: health status as defined by BMI * age and health status as defined by BMI * education. The resulting model is yhat = 103.32 + 0.44age - 3.21HSgrad - 0.035age*BMI3cat_0 + 0.042age*BMI3cat_1 + 5.30HSgrad*BMI3cat_0 - 1.97HSgrad*BMI3cat_1. The interaction between health status as defined by body mass index and age (overall) is significant since the p-value < 0.05, which is the alpha test level. So, we have a right to look at the individual terms. If we look at the individual terms, the interaction between BMI and HSgrad is not significant since the p-value = 0.31 which is > 0.05 alpha test level. The interaction between health status as defined by body mass index and education (overall) is significant since the p-value < 0.05, which is the alpha test level. So, we have a right to look at the individual terms. If we look at the individual terms, the interaction between BMI and HSgrad is not significant since the p-value = 0.54 which is > 0.05 alpha test level. There are 52 outlier observations. 1054 and 22 are influential and leverage points. 428 appears to be but, is not an influential and leverage point. 
+
+Comparison: 
+Model 1 includes BMI as a continuous variable, whereas Model 2 includes BMI as categorical interactions with age and HSgrad.
+Model 2 has lower residual standard error, showing slightly better model fit.
+Model 2 includes BMI as a main effect, which is statistically significant, while Model 1 includes BMI interactions.
+Model 1 has a slightly higher Multiple R-squared value (0.1277) compared to Model 2 (0.1232), indicating that Model 1 explains a slightly larger proportion of the variance in the dependent variable.
+Model 1 shows multicollinearity issues, as some interaction terms have NA values.
+Model 2 does not suffer from multicollinearity after removing problem predictors.
+
+#### 4. Required for graduate students / extra credit for undergraduate students: write a "one pager" for the lead scientist of JHS. This should include a paragraph that outlines the methods used and a separate paragraph that discusses results. Remember that the lead scientist is not a statistician or data scientist, so this should be written such that they will understand what you are conveying.
+
+Model 1
+The first model shows the interaction terms between age, HSgrad, and BMI, with predictors BMI*age and BMI*HSgrad(education) to the systolic blood pressure(SBP). The very low p-value (< 2.2e-16) suggests that the model as a whole is statistically significant. The Intercept, age, and BMI predictors are statistically significant with p-values < 0.05. The interaction term age:BMI is also statistically significant. The HSgrad and HSgrad:BMI predictors do not appear to be statistically significant, as their p-values > 0.05. 
+
+To determine if the interaction between body mass index(BMI) and age is significant at the alpha = 0.05 level, we performed an ANOVA and compared the full model with the interaction term to a reduced model without the interaction term. Since the p-value < alpha = 0.05, this means that the interaction between BMI and age is statistically significant. The full model with the interaction term is a better fit for the data compared to the reduced model without the interaction. So, we have evidence to support the inclusion of the interaction between BMI and age in the model.
+
+To determine if the interaction between BMI and HSgrad is significant at the alpha = 0.05 level. Since the p-value < alpha = 0.05, this means that the interaction between BMI and HSgrad is statistically significant. The full model with the interaction term (BMI:HSgrad) is a better fit for the data compared to the reduced model without the interaction. So, we have evidence to support the inclusion of the interaction between BMI and education in the model.
+
+We created the following models (i.e., plug in the following values and algebraically simplify): (1) body mass index of 32, (2) body mass index of 27, and (3) body mass index of 25.
+Model: yhat = 103.23 + 0.55 * age - 0.85 * HSgrad. Age (0.55) -> For each one-year increase in age, we expect SBP to increase by 0.55 units, assuming all other variables remain constant(this will be consistent all other models). HSgrad (-0.85) -> For individuals with higher education (HSgrad = 1), we expect SBP to be 0.85 units lower compared to those without a high school degree (HSgrad = 0). This negative coefficient suggests that higher education is associated with lower SBP.
+Model: yhat = 98.78 + 0.6 * age - 1.15 * HSgrad. Age (0.6) -> For each one-year increase in age, we expect SBP to increase by 0.6 units. HSgrad (-1.15) -> For individuals with higher education (HSgrad = 1), we expect SBP to be 1.15 units lower compared to those without a high school degree (HSgrad = 0). This negative coefficient also suggests that higher education is associated with lower SBP.
+Model: yhat = 97 + 0.62 * age - 1.27 * HSgrad. Age (0.62) -> For each one-year increase in age, we expect SBP to increase by 0.62 units, assuming all other variables remain constant. HSgrad (-1.27) -> For individuals with higher education (HSgrad = 1), we expect SBP to be 1.27 units lower compared to those without a high school degree (HSgrad = 0). Like the previous models, this negative coefficient suggests that higher education is associated with lower SBP.
+In all three models, age has a positive effect on SBP, showing that as age increases, SBP tends to increase. However, having a high school degree (HSgrad = 1) has a negative effect on SBP, showing that individuals with a high school degree tend to have lower SBP compared to those without a high school degree (HSgrad = 0).
+
+There are 55 outliers in the model. Out of those 55, 2 are influential/leverage points: 22 and 1054. To check for influential or high-leverage points in a linear regression model, we used Cook's distance or leverage values. These measures help identify data points that have a substantial impact on the regression model's coefficients. Observations with high leverage have the potential to strongly impact the model.
+
+The variance inflation factor (VIF) values in the model shows the presence of multicollinearity. When VIF values are substantially greater than 1, it means that the variables are highly correlated with each other. Typically, VIF values exceeding 5 or 10 are considered alarming. Since we found predictors with high VIF values, we removed the correlated predictors. We removed interactions or terms that contribute significantly to multicollinearity, which were interaction terms involving age and HSgrad.
+
+Model 2
+In the second model, we try to predict SBP based on age , HSgrad, body mass index categories (BMI3cat), and the specified interactions. The intercept represents the estimated SBP when all predictors are zero. A one-year increase in age is associated with an estimated increase of 0.387 mmHg in SBP. A one-unit increase in HSgrad is associated with an estimated decrease of 5.154 mmHg in SBP. The interactions (e.g., Age:BMI3cat_0) account for the effect of different BMI3cat categories on SBP for each year of age.
+
+To determine if the interaction between health status as defined by body mass index (BMI3cat) and age is significant, we performed an ANOVA test. Since the p-value < alpha level = 0.05. This means that the interaction between health status defined by BMI3cat and age is statistically significant. In other words, including these interaction terms in the model significantly improves its fit to the data. So, we can show that there is a significant interaction effect between BMI3cat and age in explaining SBP.
+
+To determine if the interaction between health status as defined by body mass index (BMI3cat) and HSgrad is significant, we performed an ANOVA test. Since the p-value < alpha level = 0.05. This means that the interaction between health status defined by BMI3cat and HSgrad is statistically significant. So, we can show that there is a significant interaction effect between BMI3cat and HSgrad in explaining SBP.
+
+For slope interpretation. 
+Poor health: for age (0.44) suggests that for each unit increase in age, the predicted value of SBP is expected to increase by 0.44 units, all other variables constant(this will be consistent all other models).For HSgrad (-3.21) suggests that for each unit increase in HSgrad, the predicted value is expected to decrease by 3.21 units. 
+Intermediate health: for age (0.44) still suggests that for each unit increase in age, the predicted value is expected to increase by 0.44 units. For HSgrad (-1.97) suggests that for each unit increase in HSgrad, the predicted value is expected to decrease by 1.97 units. The interaction term with HSgrad (5.30) no longer has an effect since the interaction variable BMI3cat_0 is set to 0. 
+Ideal health: for age (0.44) suggests that for each unit increase in age, the predicted value is expected to increase by 0.44 units. The coefficient for HSgrad (-3.21) suggests that for each unit increase in HSgrad, the predicted value is expected to decrease by 3.21 units. All the interaction terms with age and HSgrad are set to 0, which means they have no effect on the predicted value. As a result, only the main effects of age and HSgrad remain.
+
+There are 52 outliers in the model. Out of those 52, 2 are influential/leverage points: 22, 1054. To check for influential or high-leverage points in a linear regression model, we used Cook's distance or leverage values. 
+
+In this model, there is evidence of variable aliasing due to multicollinearity. We saw terms in the model summary with coefficients set to 0. This means that those terms were aliased or dropped due to multicollinearity, as they were linear combinations of other variables. The interactions age:BMI3cat_1 and HSgrad:BMI3cat_2 were removed to address multicollinearity.
+
+

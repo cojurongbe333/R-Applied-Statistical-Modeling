@@ -1,0 +1,233 @@
+---
+title: "Project 1"
+author: "Chantal Ojurongbe"
+format: html
+self-contained: true
+---
+
+#### This week you will be analyzing data from the Jackson Heart Study (JHS). You can find the data on Canvas. For full credit, you must include all code chunks and R output backing up your responses.
+```{r, echo = TRUE}
+
+library(fastDummies)
+library(haven)
+library(lindia)
+library(tidyverse)
+library(gsheet)
+library(DescTools)
+library(FSA)
+library(dplyr)
+library(ggplot2)
+library(car)
+library(agricolae)
+library(gmodels)
+library(dplyr)
+library()
+
+
+
+sas_data <- read_sas("analysis1.sas7bdat")
+
+head(sas_data)
+
+```
+
+
+#### 1a. Model systolic blood pressure (*sbp*; mmHg) as a function of age (*age*; years), education (*HSgrad*; 0=no, 1=yes), and body mass index (*bmi*; kg/m<sup>2</sup>). Remember to report the resulting model.
+
+```{r, echo = TRUE}
+data1 <- as_tibble(sas_data %>% select(sbp,
+age, HSgrad, BMI))
+
+head(data1)
+
+m1 <- lm(sbp ~ age + HSgrad + BMI,
+         data = data1)
+summary(m1)
+
+```
+yhat = 95.04 + 0.44age - 0.84HSgrad + 0.24BMI
+
+#### 1b. Construct the 95% confidence intervals for the regression coefficients.
+
+```{r, echo = TRUE}
+
+confint(m1)
+
+```
+95% CI for Age is (0.4, 0.5).
+95% CI for HSgrad is (-2.5, 0.83).
+95% CI for BMI is (0.16, 0.32).
+
+#### 1c. Which predictors, if any, are significant predictors of systolic blood pressure? Test at the $\alpha=0.05$ level.
+
+```{r, echo = TRUE}
+m1 <- lm(sbp ~ age + HSgrad + BMI,
+         data = data1)
+summary(m1)
+```
+Age is a significant predictor of sbp. Its p-value < 0.001.
+BMI is a significant predictor of sbp. Its p-value < 0.001.
+
+#### 1d. Provide brief interpretations for the slopes of the predictors.
+For each additional year of age, SBP is expected to increase by approximately 0.445 units.
+For individuals with a one-unit change in HSgrad(e.g., from not graduating to graduating high school), there is an expected decrease of approximately 0.838 units in SBP.
+For each one-unit increase in BMI, SBP is expected to increase by approximately 0.240 units.
+
+#### 1e. Construct an appropriate data visualization to help with explaining the model results. Systolic blood pressure should be on the y-axis, age should be on the x-axis. You choose what lines to create.
+
+```{r, echo = TRUE}
+
+m1a <- lm(sbp ~ age, data = data1)
+summary(m1a)
+
+
+c1 <- coefficients(m1a)
+
+data1 <- data1 %>%
+  mutate(
+    p_age = c1[1] + c1[2] * age,
+    p_sbp = c1[1] + c1[2] * mean(age, na.rm = TRUE) 
+  )
+
+p1 <- data1 %>% 
+  ggplot(aes(x = age, y = sbp)) +
+  geom_point(size = 1) +
+  geom_line(aes(x = age, y = p_age), color = "blue") +
+  labs(x = "Age in Years", y = "Systolic Blood Pressure", title = "Scatter Plot of Age vs. Systolic Blood Pressure")
+print(p1) 
+
+
+
+```
+
+#### 2a. Model systolic blood pressure (*sbp*; mmHg) as a function of age (*age*; years), education (*HSgrad*; 0=no, 1=yes), and health status as defined by body mass index (*bmi3cat*; 0=poor health, 1=intermediate health, 2=ideal health). Remember to report the resulting model.
+
+```{r, echo = TRUE}
+
+data2 <- as_tibble(sas_data %>% select(sbp,
+age, HSgrad, BMI3cat))
+
+head(data2)
+
+data2 %>% count(BMI3cat)
+
+data2 <- dummy_cols(data2, select_columns = "BMI3cat")
+colnames(data2)
+
+m2a <- lm(sbp ~ age + HSgrad + BMI3cat_0 + BMI3cat_1 + BMI3cat_2, data = data2)
+summary(m2a)
+
+
+coefficients(m2a)
+
+```
+yhat = 101.22 + 0.44age - 0.92HSgrad + 3.14BMI3cat_0 + 0.96BMI3cat_1
+
+As BMI3cat_2 is the reference group.
+
+#### 2b. Construct the 95% confidence intervals for the regression coefficients.
+
+```{r, echo = TRUE}
+
+confint(m2a)
+
+```
+For BMI3cat_2 as reference
+95% CI for Age is (0.40, 0.50)
+95% CI for HSgrad is (-2.60, 0.76)
+95% CI for BMI3cat_0 is (1.41, 4.86)
+95% CI for BMI3cat_1 is (-0.87, 2.80)
+
+#### 2c. Which predictors, if any, are significant predictors of systolic blood pressure? Test at the $\alpha=0.05$ level.
+
+```{r, echo = TRUE}
+analytic <- data2 %>%
+  select(sbp, age, HSgrad, BMI3cat) %>%
+  na.omit()
+
+analytic <- dummy_columns(analytic, select_columns = "BMI3cat")
+
+
+m2a <- lm(sbp ~ age + HSgrad + BMI3cat_0 + BMI3cat_1 + BMI3cat_2, data = analytic)
+summary(m2a)
+
+full <- lm(sbp ~ age + HSgrad + BMI3cat_0 + BMI3cat_1 + BMI3cat_2, data = analytic)
+reduced <- lm(sbp ~ age + HSgrad, data = analytic)
+
+anova_result <- anova(reduced, full)
+print(anova_result)
+```
+Hypotheses
+
+H0 : βBMI3cat_0 = βBMI3cat_1 = 0
+H1 : at least one βi = 0, i = {BMI3cat_0, BMI3cat_1}
+
+Test Statistic and p-Value
+F0 = 9.7049 
+p < 0.001
+
+Rejection Region
+Reject H0 if p < α; α = 0.05.
+
+Conclusion / Interpretation
+Reject H0. at least one BMI3cat is a significant predictor of sbp.
+
+
+Age is a significant predictor of sbp. Its p-value is < 0.0001.
+HSgrad and BMI3cat_1 do not appear to be statistically significant predictors, with BMI3cat_2 as the reference group, as their p-values are relatively high.
+
+#### 2d. Provide brief interpretations for the slopes of the predictors.
+
+For each additional year of Age, SBP is expected to increase by approximately 0.434 units.
+The coefficient for education/HSgrad is -0.9157. Since this is close to zero and not statistically significant (p-value is 0.2844), it indicates that there is no significant relationship between HSgrad and SBP.
+Different categories of BMI3cat are associated with SBP differences compared to the reference category. Individuals falling under the category BMI3cat_0 have, on average, a SBP approximately 3.1384 units higher than the reference category BMI3cat_2. Individuals in the BMI3cat_1 category have, on average, a SBP approximately 0.9644 units higher than the reference category BMI3cat_2.
+
+#### 2e. Construct an appropriate data visualization to help with explaining the model results. Systolic blood pressure should be on the y-axis, age should be on the x-axis. You choose what lines to create.
+
+```{r, echo = TRUE}
+
+c2 <- coefficients(m2a)
+c2
+data2 <- data2 %>% mutate(
+predBMI3cat_0 = c2[[1]] + c2[[2]]*age,
+predBMI3cat_1 = c2[[1]] + c2[[2]]*age + c2[[3]],
+predBMI3cat_2 = c2[[1]] + c2[[2]]*age + c2[[4]]
+)
+
+p2 <- ggplot(data2, aes(x = age, y = sbp)) +
+  geom_point(size = 1) +
+ geom_line(aes(y = predBMI3cat_0), color = "#F8766D", linetype = "solid") +
+geom_line(aes(y = predBMI3cat_1), color = "#00BA38", linetype = "solid") +
+geom_line(aes(y = predBMI3cat_2), color = "#619CFF", linetype = "solid") +
+xlab("Age in Years") +
+ylab("Systolic Blood Pressure")
+
+print(p2)
+```
+
+#### 3. Write a summary paragraph that (1) summarizes the results of each model, (2) compares and contrasts the results. This paragraph can be more technical in nature (i.e., you are writing it for me, a professional statistician/data scientist).
+Model 1 data: Modeling SBP as a function of age, education, and BMI. The resulting model is yhat = 98.04 + 0.44age - 0.84HSgrad + 0.24BMI. 95% CI for Age is (0.4, 0.5). 95% CI for HSgrad is (-2.5, 0.83). 95% CI for BMI is (0.16, 0.32). For each additional year of age, SBP is expected to increase by approximately 0.445 units.
+For individuals with a one-unit change in HSgrad, there is an expected decrease of approximately 0.838 units in SBP. For each one-unit increase in BMI, SBP is expected to increase by approximately 0.240 units. In summary, model 1 suggest that Age and BMI are significant predictors of SBP, with higher age and higher BMI values associated with higher SBP. However, HSgrad does not appear to be a significant predictor, as its p-value is greater than 0.05. 
+
+Model 2 data: Modeling SBP as a function of age, education, and BMI3cat. The resulting model is yhat = 101.22 + 0.44age - 0.92HSgrad + 3.14BMI3cat_0 + 0.96BMI3cat_1.For BMI3cat_2 as reference, 95% CI for Age is (0.40, 0.50). 95% CI for HSgrad is (-2.60, 0.76). 95% CI for BMI3cat_0 is (1.41, 4.86)
+95% CI for BMI3cat_1 is (-0.87, 2.80) For each additional year of Age, SBP is expected to increase by approximately 0.434 units. For individuals with a one-unit change in HSgrad, there is an expected decrease of approximately 0.940 units in SBP. Different categories of BMI3cat are associated with SBP differences compared to the reference category. Specifically, the categories represented by this coefficient have an expected decrease in SBP of approximately 1.730 units compared to the reference category. In summary, model 2 suggests that Age and BMI3cat are significant predictors of SBP, with higher age associated with higher SBP and certain BMI categories associated with lower SBP. HSgrad does not appear to be a significant predictor in this analysis, as its p-value is greater than 0.05. 
+
+#### 4. Required for graduate students / extra credit for undergraduate students: write a "one pager" for the lead scientist of JHS. This should include a paragraph that outlines the methods used and a separate paragraph that discusses results. Remember that the lead scientist is not a statistician or data scientist, so this should be written such that they will understand what you are conveying.
+
+The first model aims to predict systolic blood pressure (SBP) based on the predictors age, education/HSgrad, and BMI. The very low p-value (< 2.2e-16) suggests that the model as a whole is statistically significant. The second model aims to predict SBP based on the predictors Age, education/HSgrad, and BMI3cat(categorized). The very low p-value (< 2.2e-16) suggests that the model as a whole is statistically significant.
+ 
+  The confidence intervals helps to categorize the accuracy of the coefficient estimates. We are using a 95% confidence interval which suggests that you are 95% confident that the true population value of the coefficient falls within that range.
+In model 1, we can be confident that age has a statistically significant and positive effect on SBP. For each one-unit increase in age, you can expect a change in SBP between 0.4 and 0.5 units, presuming all other variables remain unchanged. For education/HSgrad, since this interval contains both positive and negative values, it suggests that the effect of high school graduation on SBP is not statistically significant in this model. For BMI when it increases by one unit, SBP is expected to increase by an amount of 0.16 to 0.32 units, presuming all other variables remain unchanged. This means that BMI is a statistically significant predictor of SBP and has a positive effect on SBP. So, when the BMI increases the SBP also increases. 
+In model 2, we can be confident that age has a statistically significant and positive effect on SBP. For each one-unit increase in age, you can expect a change in SBP between 0.4 and 0.5 units, presuming all other variables remain unchanged. For education/HSgrad, since this interval contains both positive and negative values, it suggests that the effect of high school graduation on SBP is not statistically significant in this model. Individuals in the BMI3cat_0 category have, on average, a SBP approximately 1.4182 units higher than the reference category BMI3cat_2. Individuals in the BMI3cat_1 category have, on average, a SBP approximately 0.8650 units lower to 2.79 units higher than the reference category BMI3cat_2.
+
+  The slope coefficient represents the expected change in the dependent variable,like SBP, for a one-unit change in the predictor.
+For model 1, the coefficient for Age is 0.44461. For each additional year of age, SBP is expected to increase by approximately 0.445 units, assuming all other variables remain unchanged. The small p-value (< 2e-16) indicates that Age is a highly significant predictor, and the positive coefficient suggests that increasing age is associated with higher SBP. The coefficient for HSgrad is -0.83780. For individuals with a one-unit change in HSgrad, there is an expected decrease of approximately 0.838 units in SBP, assuming all other factors remain constant. However, the p-value for HSgrad is 0.326, which is greater than the alpha/significance level of 0.05. This suggests that HSgrad is not a statistically significant predictor, and the observed effect may be due to random discrepancies. 
+For model 2, the coefficient for Age is 0.43382. For each additional year of age, SBP is expected to increase by approximately 0.434 units, assuming all other variables remain unchanged. The small p-value (< 2e-16) indicates that Age is a highly significant predictor, and the positive coefficient suggests that increasing age is associated with higher SBP. The coefficient for HSgrad is -0.93980. For individuals with a one-unit change in HSgrad (e.g., from not graduating to graduating high school), there is an expected decrease of approximately 0.940 units in SBP, assuming all other variables remain unchanged. However, the p-value for HSgrad is 0.272, which is greater than the alpha/significance level of 0.05. This suggests that HSgrad is not a statistically significant predictor, and the observed effect may be due to random discrepancies. Individuals falling under the category BMI3cat_0 have, on average, a SBP approximately 3.1384 units higher than the reference category BMI3cat_2. Individuals in the BMI3cat_1 category have, on average, a SBP approximately 0.9644 units higher than the reference category BMI3cat_2
+In summary, Age and BMI are significant predictors of SBP in our model. Increasing age and higher BMI values are associated with higher SBP.
+
+  The dependent variable (SBP) is affected by the coefficients and the significant predictors by the p-value. 
+For model 1, Age has an estimated coefficient of 0.44461 with a low standard error (0.02544) and a very high t-value (17.480). The p-value of Age is < 0.0001, which is much smaller than the alpha/significance level of 0.05. This means Age is a highly significant predictor of SBP. HSgrad has an estimated coefficient of -0.83780, but the p-value is 0.326, which is greater than 0.05. This means that HSgrad is not a statistically significant predictor of SBP in our model. BMI has an estimated coefficient of 0.23988 and a very small p-value (4.9e-09), showing that BMI is a highly significant predictor of SBP. In summary, the significant predictors of SBP in our model are Age and BMI. HSgrad is not a significant predictor in this analysis, as its p-value is greater than 0.05.
+For model 2, Age has an estimated coefficient of 0.43382 with a low standard error (0.02542) and a very high t-value (17.065). The p-value of Age is < 0.0001, which is much smaller than the alpha/significance level of 0.05. This means that Age is a highly significant predictor of SBP. HSgrad has an estimated coefficient of -0.93980, but the p-value is 0.272, which is greater than 0.05. This means that HSgrad is not a statistically significant predictor of SBP in our model. 
+The estimated coefficient for BMI3cat_0 is 3.13837 with a standard error of 0.87726 and a t-value of 3.577. BMI3cat_0 is highly significant (p = 0.000353). The estimated coefficient for BMI3cat_1 is 0.96442 with a standard error of 0.93298 and a t-value of 1.034. BMI3cat_1 does not appear to be a statistically significant predictor (p = 0.301373) of SBP. In summary with BMI3cat_2 as a reference group, the significant predictors of SBP in the model are Age and BMI3cat_0. HSgrad and BMI3cat_1 are not significant predictors in this analysis, as its p-value is greater than 0.05.
+
+

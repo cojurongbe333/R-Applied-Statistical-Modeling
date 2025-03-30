@@ -1,0 +1,780 @@
+---
+title: "Take Home Final: SDS II"
+author: "Chantal Ojurongbe"
+execute:
+  echo: true
+  warning: false
+  message: false
+format: html
+self-contained: true
+---
+
+**Notes:**
+
+- 1: Please read all instructions for each question carefully.
+
+- 2: All models can be constructed using the methods we learned this semester (Dr. Seals has double checked everything... she thinks 😅). Some questions are *intentionally* challenging to simulate a "real life" working environment where we have to research solutions to issues.
+
+- 3: Coding-specific notes:
+
+    - If you get an error about a model not converging, please look into increasing the number of iterations for the function you are using.
+  
+    - If a function suddenly does not work as it previously did on a project, Google the error message.
+      
+    - The following functions may be helpful when you need some data management help: `mutate()`, `as.numeric()`, `elseif()`, and/or `case_when()`.
+    
+- 4: Formatting notes:
+
+    - Please do not bold your responses - make it easy for me to tell the difference between my questions and your responses.
+    
+    - <u>Do not</u> print the dataset to the file; if you want to view the dataset, please use the data viewer in RStudio or use the `head()` function. (Do not make me scroll forever to find your answer... I may overlook it on accident.)
+  
+- 4: You are <u>not permitted</u> to discuss the content of this exam with <u>anyone</u> other than Dr. Seals. *Evidence of acaademic misconduct will be submitted to the Dean of Students office and you will receive a 0 on this exam.*
+
+---
+
+## Dataset 1: Spotify
+```{r}
+library(brglm)
+library(Matrix)
+library(glmnet)
+library(nnet)
+library(boot)
+library(fastDummies)
+library(haven)
+library(lindia)
+library(tidyverse)
+library(gsheet)
+library(DescTools)
+library(FSA)
+library(dplyr)
+library(ggplot2)
+library(car)
+library(agricolae)
+library(gmodels)
+library(dplyr)
+library(car)
+library(readr)
+library(broom)
+library(modelr)
+library(performance)
+library(GGally)
+library(emmeans)
+library(visreg)
+library(see)
+library(patchwork)
+library(caret)
+```
+
+**1. Consider the Spotify data here: [TidyTuesday - Spotify](https://github.com/rfordatascience/tidytuesday/tree/master/data/2020/2020-01-21). We will be working with *danceability* as the outcome and *loudness*, *energy*, and *playlist_genre* as predictors.  Go ahead and pull in the data.**
+```{r}
+data_final_spotify <- read_csv("spotify_songs.csv", show_col_types = FALSE)
+
+head(colnames(data_final_spotify))
+```
+**1a-i. Let's do some data exploration. What are the possible responses in *playlist_genre*? How many songs fall into each genre?**
+```{r}
+genre_counts <- table(data_final_spotify$playlist_genre)
+
+print(genre_counts)
+```
+  edm latin   pop   rap    rb  rock 
+ 6043  5155  5507  5746  5431  4951 
+ 
+**1a-ii. Let's do some data exploration. What is the mean *danceability*, *loudness*, and *energy* for each level of *playlist_genre*? Please display these means in a table. Hint! Use [tablesgenerator.com](tablesgenerator.com) to create the markdown table.**
+```{r}
+genre_means <- data_final_spotify %>%
+  group_by(playlist_genre) %>%
+  summarise(
+    mean_danceability = mean(danceability, na.rm = TRUE),
+    mean_loudness = mean(loudness, na.rm = TRUE),
+    mean_energy = mean(energy, na.rm = TRUE)
+  )
+
+print(genre_means)
+```
+
+| playlist_genre <chr> | mean_danceability <dbl> | mean_loudness <dbl> | mean_energy <dbl> |
+|----------------------|------------------------:|--------------------:|------------------:|
+| edm                  |               0.6550409 |           -5.427445 |         0.8024759 |
+| latin                |               0.7132873 |           -6.264455 |         0.7083125 |
+| pop                  |               0.6393017 |           -6.315328 |         0.7010278 |
+| r&b                  |               0.6701793 |           -7.864848 |         0.5909343 |
+| rap                  |               0.7183528 |           -7.042269 |         0.6507084 |
+| rock                 |               0.5205480 |           -7.588895 |         0.7328133 |
+
+**1b. Consider modeling *danceability* as a function of *loudness*, *energy*, *playlist_genre*, and the interaction between *loudness* and *energy*.**
+```{r}
+data_final_spotify <- dummy_columns(data_final_spotify, select_columns = "playlist_genre")
+head(colnames(data_final_spotify))
+
+
+m1b <- lm(danceability ~ loudness + energy + playlist_genre_edm + playlist_genre_latin + playlist_genre_pop + playlist_genre_rb + playlist_genre_rap + playlist_genre_rock + loudness:energy, data = data_final_spotify)
+
+summary(m1b)
+
+```
+
+yhat = 0.69 + 0.017loudness - 0.24energy + 0.14playlist_genre_edm + 0.19playlist_genre_latin +  0.11playlist_genre_pop + 0.14playlist_genre_rb + 0.19playlist_genre_rap - 0.03loudness:energy 
+
+
+**1b-i. What method (distribution) do you think is appropriate to apply here? Provide evidence to support your idea.**
+```{r}
+hist(data_final_spotify$danceability, breaks=30, main="Histogram of Danceability", xlab="Danceability")
+
+plot(data_final_spotify$loudness, data_final_spotify$danceability, main="Danceability vs. Loudness", xlab="Loudness", ylab="Danceability")
+
+plot(data_final_spotify$energy, data_final_spotify$danceability, main="Danceability vs. Energy", xlab="Energy", ylab="Danceability")
+
+qqnorm(residuals(m1b))
+qqline(residuals(m1b))
+```
+
+A linear regression is the best method to use, if the deviations from normality are not extreme. The distribution of danceability appears to be  symmetrical and looks like a normal distribution. There is a notable concentration of values around the center of the range, showing that most songs have a moderate level of danceability.
+
+**1b-ii. What is the resulting model using the approach from 1b-i?** 
+
+yhat = 0.69 + 0.017loudness - 0.24energy + 0.14playlist_genre_edm + 0.19playlist_genre_latin +  0.11playlist_genre_pop + 0.14playlist_genre_rb + 0.19playlist_genre_rap - 0.03loudness:energy 
+
+**1b-iii. Check the relevant assumptions of the model. Are we okay to proceed with statistical inference?**
+```{r}
+qqPlot(m1b, main = "Q-Q Plot")
+hist(resid(m1b), breaks = 30, main = "Histogram")
+
+```
+
+We are good to proceed with statistical inference.
+
+**1b-iv. Which, if any, are significant predictors of *danceability*? Test at the $\alpha=0.05$ level.** 
+
+All predictors are significant. They all have p-values that are less than the alpha level of 0.05. This includes the interaction between loudness and energy, 
+
+**1b-v. To get a model we can interpret, please plug the median of *loudness* (to the model reported in 1c-ii) and simplify algebraically.**
+```{r}
+loudness_median <- median(data_final_spotify$loudness, na.rm = TRUE)
+
+print(loudness_median)
+```
+
+yhat = 0.585 - 0.425energy + 0.14playlist_genre_edm + 0.19playlist_genre_latin + 0.11playlist_genre_pop + 0.14playlist_genre_rb + 0.19playlist_genre_rap
+
+
+**1b-vi. Provide basic interpretations of either the slopes or the exponentiated slopes, *whichever is appropriate.*.**
+
+Energy (Coefficient = -0.425): For each one-unit increase in energy, danceability is expected to decrease by 0.425 units. Since danceability is a score between 0 and 1, this shows that songs with higher energy are expected to be less danceable. 
+
+Playlist Genres: The coefficients for the playlist genres are positive, showing that songs in these genres are more danceable compared to the reference genre, playlist_genre_rock.
+
+Playlist_genre_edm (Coefficient = 0.14): Songs that fall into the EDM genre playlist are expected to have a danceability score that is 0.14 units higher than the reference genre, playlist_genre_rock.
+
+Playlist_genre_latin (Coefficient = 0.19): Songs that fall into the Latin genre playlist are expected to have a danceability score that is 0.19 units higher than the reference genre, playlist_genre_rock.
+
+Playlist_genre_pop (Coefficient = 0.11): Songs that fall into the Pop genre playlist are expected to have a danceability score that is 0.11 units higher than the reference genre, playlist_genre_rock.
+
+Playlist_genre_rb (Coefficient = 0.14): Songs that fall into the R&B genre playlist are expected to have a danceability score that is 0.14 units higher than the reference genre, playlist_genre_rock.
+
+Playlist_genre_rap (Coefficient = 0.19): Songs that fall into the Rap genre playlist are expected to have a danceability score that is 0.19 units higher than the reference genre, playlist_genre_rock.
+
+**1c-i. Construct a relevant graph to help you explain results.**
+```{r}
+energy_values <- seq(min(data_final_spotify$energy, na.rm = TRUE), max(data_final_spotify$energy, na.rm = TRUE), length.out = 100)
+
+yhat_edm <- coef(m1b)["(Intercept)"] + coef(m1b)["energy"] * energy_values + coef(m1b)["playlist_genre_edm"]
+yhat_latin <- coef(m1b)["(Intercept)"] + coef(m1b)["energy"] * energy_values + coef(m1b)["playlist_genre_latin"]
+yhat_pop <- coef(m1b)["(Intercept)"] + coef(m1b)["energy"] * energy_values + coef(m1b)["playlist_genre_pop"]
+yhat_rb <- coef(m1b)["(Intercept)"] + coef(m1b)["energy"] * energy_values + coef(m1b)["playlist_genre_rb"]
+yhat_rap <- coef(m1b)["(Intercept)"] + coef(m1b)["energy"] * energy_values + coef(m1b)["playlist_genre_rap"]
+
+plot_data <- data.frame(
+  Energy = rep(energy_values, 5),
+  Predicteddanceability = c(yhat_edm, yhat_latin, yhat_pop, yhat_rb, yhat_rap),
+  Genre = factor(rep(c("EDM", "Latin", "Pop", "R&B", "Rap"), each = 100))
+)
+
+ggplot(plot_data, aes(x = Energy, y = Predicteddanceability, color = Genre)) +
+  geom_line() +
+  labs(title = "Predicted danceability by Energy Level across Genres",
+       x = "Energy",
+       y = "Predicted danceability") +
+  scale_color_manual(values = c("EDM" = "blue", "Latin" = "red", "Pop" = "green", "R&B" = "purple", "Rap" = "orange")) +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+predicted_values <- predict(m1b, newdata = data_final_spotify)
+
+ggplot(data_final_spotify, aes(x = danceability, y = predicted_values)) +
+  geom_point(alpha = 0.5) + 
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") + 
+  labs(title = "Actual vs. Predicted Danceability",
+       x = "Actual Danceability",
+       y = "Predicted Danceability") +
+  theme_minimal()
+```
+
+**1c-ii. Write a brief paragraph conveying the results to a nightclub manager, who wants to make sure they are playing the songs with the highest danceability (and is definitely not a data scientist or statistician).**
+
+We have performed an analysis on the danceability of songs and its correlation with their attributes. The investigation has yielded valuable insights that could enhance the music selection process for your establishment. An inverse association has been established between energy and danceability. As the energy level of a music increases, its danceability tends to decrease. Therefore, to enhance the danceability, it is recommended to choose songs that have a moderate level of excitement.
+
+Furthermore, our research suggests that genre has a significant influence. EDM and Latin songs demonstrate a higher danceability rating, with Latin music slightly above. Although Pop, R&B, and Rap genres contribute to danceability, their influence is not as substantial as that of EDM and Latin genres.
+
+To ensure that your playlists consist of highly danceable songs, we recommend giving preference to tracks with moderate intensity levels in the EDM and Latin genres. These genres often include a rhythmic and beat-driven sound that actively encourages dancing. To guarantee a vibrant dance floor and keep your customers engaged all night, carefully curate your playlist with a meticulous selection of music spanning all genres.
+
+## Dataset 2: Single Mother Households
+
+
+**2. Consider the childcare cost dataset here: [TidyTuesday - Childare Costs](https://github.com/rfordatascience/tidytuesday/tree/master/data/2023/2023-05-09). We will be working with the number of single mother households with children under 6 years old (*h_under6_single_m*) as the outcome and median household income (*mhi_2018*), the unemployment rate for those 16 and older (*unr_16*), and the total number of households (*households*) as predictors.  Go ahead and pull in the data.**
+```{r}
+data_childcare_cost <- read_csv("childcare_costs.csv", show_col_types = FALSE)
+
+head(colnames(data_childcare_cost))
+
+dataFP2 <- data_childcare_cost %>%
+  dplyr::select(h_under6_single_m, mhi_2018, unr_16, households) %>%
+  na.omit()
+
+```
+
+
+**2a-i. Let's do some data exploration. Explore and summarize the outcome, *h_under6_single_m*. (Yes, this is vague. You should look at summary statistics and at least one graph.)**
+```{r}
+data_childcare_cost %>% 
+  summarise(
+    mean_unr_16 = mean(h_under6_single_m, na.rm = TRUE),
+    sd_unr_16 = sd(h_under6_single_m, na.rm = TRUE),
+    min_unr_16 = min(h_under6_single_m, na.rm = TRUE),
+    max_unr_16 = max(h_under6_single_m, na.rm = TRUE),
+    median_unr_16 = median(h_under6_single_m, na.rm = TRUE))
+
+summary(dataFP2$h_under6_single_m)
+
+ggplot(dataFP2, aes(x = h_under6_single_m)) +
+  geom_histogram(binwidth = 9000, fill = "blue", color = "black") +
+  labs(title = "Histogram of Childcare Costs for Households with Single Mothers and Children Under 6",
+       x = "Childcare Costs",
+       y = "Frequency")
+
+ggplot(dataFP2, aes(y = h_under6_single_m)) +
+  geom_boxplot(fill = "turquoise", colour = "black") +
+  labs(title = "Boxplot of Costs for Single Mothers with Children Under 6",
+       y = "Costs") +
+  theme_minimal()
+
+```
+
+**2a-ii. Let's do some data exploration. Explore and summarize *mhi_2018*. (Yes, this is vague. You should look at summary statistics and at least one graph.)**
+```{r}
+data_childcare_cost %>% 
+  summarise(
+    mean_mhi_2018 = mean(mhi_2018, na.rm = TRUE),
+    sd_mhi_2018 = sd(mhi_2018, na.rm = TRUE),
+    min_mhi_2018 = min(mhi_2018, na.rm = TRUE),
+    max_mhi_2018 = max(mhi_2018, na.rm = TRUE),
+    median_mhi_2018 = median(mhi_2018, na.rm = TRUE))
+
+summary(dataFP2$mhi_2018)
+
+data_childcare_cost %>% 
+  group_by(study_year) %>% 
+  summarise(avg_mc_infant = mean(mc_infant, na.rm = TRUE)) %>%
+  ggplot(aes(x = study_year, y = avg_mc_infant)) +
+  geom_line() +
+  theme_minimal() +
+  labs(title = "Average Infant Childcare Costs Over Years", x = "Year", y = "Average Cost")
+
+ggplot(data_childcare_cost, aes(x = mhi_2018)) +
+  geom_histogram(binwidth = 1000, fill = "blue", color = "black") +
+  labs(title = "Histogram of Median Household Income 2018", x = "Median Household Income", y = "Count")
+
+ggplot(data_childcare_cost, aes(y = mhi_2018)) +
+  geom_boxplot(fill = "cyan", color = "black") +
+  labs(title = "Boxplot of Median Household Income 2018", y = "Median Household Income")
+
+```
+
+**2a-iii. Let's do some data exploration. Explore and summarize *unr_16*. (Yes, this is vague. You should look at summary statistics and at least one graph.)**
+```{r}
+data_childcare_cost %>% 
+  summarise(
+    mean_unr_16 = mean(unr_16, na.rm = TRUE),
+    sd_unr_16 = sd(unr_16, na.rm = TRUE),
+    min_unr_16 = min(unr_16, na.rm = TRUE),
+    max_unr_16 = max(unr_16, na.rm = TRUE),
+    median_unr_16 = median(unr_16, na.rm = TRUE))
+
+ggplot(data_childcare_cost, aes(x = unr_16)) +
+  geom_histogram(binwidth = 0.5, fill = "blue", color = "black") +
+  theme_minimal() +
+  labs(title = "Histogram of Unemployment Rates in 2016", x = "Unemployment Rate", y = "Frequency")
+
+ggplot(data_childcare_cost, aes(y = unr_16)) +
+  geom_boxplot(fill = "cyan", color = "black") +
+  labs(title = "Boxplot of Unemployment Rate (16+)", y = "Unemployment Rate")
+
+
+
+```
+
+**2a-iv. Let's do some data exploration. Explore and summarize *households*. (Yes, this is vague. You should look at summary statistics and at least one graph.)**
+```{r}
+data_childcare_cost %>% 
+  summarise(
+    mean_households = mean(households, na.rm = TRUE),
+    sd_households = sd(households, na.rm = TRUE),
+    min_households = min(households, na.rm = TRUE),
+    max_households = max(households, na.rm = TRUE),
+    median_households = median(households, na.rm = TRUE)
+  )
+ggplot(data_childcare_cost, aes(x = households)) +
+  geom_histogram(binwidth = 20000, fill = "blue", color = "black") +
+  labs(title = "Histogram of Households", x = "Number of Households", y = "Frequency")
+
+ggplot(data_childcare_cost, aes(y = households)) +
+  geom_boxplot(fill = "cyan", color = "black") +
+  labs(title = "Boxplot of Households", y = "Number of Households")
+
+```
+
+**2b. Consider modeling *h_under6_single_m* as a function of *mhi_2018*, *unr_16*, *households*, and the interaction between *unr_16* and *households*.**
+```{r}
+
+m2b <- lm(h_under6_single_m ~ mhi_2018 + unr_16 + households + unr_16:households, data = data_childcare_cost)
+
+summary(m2b)
+
+
+```
+
+yhat = 2231 - 0.04148mhi_2018 - 45.81unr_16 + 0.03349households + 0.003298unr_16:households
+
+**2b-i. What method (distribution) do you think is appropriate to apply here? Provide evidence to support your idea.**
+```{r}
+hist(residuals(m2b), breaks = 10, main = "Histogram of Residuals", xlab = "Residuals")
+
+qqnorm(residuals(m2b))
+qqline(residuals(m2b))
+
+plot(fitted(m2b), residuals(m2b), xlab = "Fitted Values", ylab = "Residuals", main = "Residuals vs Fitted")
+abline(h = 0, col = "red")
+
+vif(m2b)
+
+```
+
+The Q-Q plot shows that the distribution of the households variable is likely skewed and not normal. What we see in income of households data, there are a small number of very high values and a larger number of more moderate values.
+
+**2b-ii. What is the resulting model using the approach from 2b-i?** 
+
+yhat = 2231 - 0.04148mhi_2018 - 45.81unr_16 + 0.03349households + 0.003298unr_16:households
+
+**2b-iii. Check the relevant assumptions of the model. Are we okay to proceed with statistical inference?**
+```{r}
+plot(m2b, which = 1:2)
+
+qqnorm(residuals(m2b))
+
+vif(m2b)
+
+plot(m2b, which = 4:6)
+```
+
+**2b-iv. Which, if any, are significant predictors of *h_under6_single_m*? Test at the $\alpha=0.05$ level.** 
+
+*mhi_2018*, *unr_16*, *households*, and the interaction between *unr_16* and *households* are all significant predictors of *h_under6_single_m*. Their p-values are less than the alpha level 0.05.
+
+**2b-v. To get a model we can interpret, please plug the following values to the model in 2b-ii and simplify algebraically (resulting in three models): 25^th^ percentile of *households*, median of *households*, and 75^th^ percentile of *households*.**
+```{r}
+percentile_25 <- quantile(data_childcare_cost$households, 0.25, na.rm = TRUE)
+median_households <- median(data_childcare_cost$households, na.rm = TRUE)
+percentile_75 <- quantile(data_childcare_cost$households, 0.75, na.rm = TRUE)
+
+cat("25th percentile of households:", percentile_25, "\n")
+cat("Median of households:", median_households, "\n")
+cat("75th percentile of households:", percentile_75, "\n")
+
+H_25 <- quantile(data_childcare_cost$households, probs = 0.25, na.rm = TRUE)
+H_50 <- median(data_childcare_cost$households, na.rm = TRUE)
+H_75 <- quantile(data_childcare_cost$households, probs = 0.75, na.rm = TRUE)
+
+beta_0 <- m2b$coefficients["(Intercept)"]
+beta_1 <- m2b$coefficients["mhi_2018"]
+beta_2 <- m2b$coefficients["unr_16"]
+beta_3 <- m2b$coefficients["households"]
+beta_4 <- m2b$coefficients["unr_16:households"]
+
+
+model_25_eq <- paste("h_under6_single_m = ", round(beta_0 + beta_3 * H_25, 2), 
+                     " + ", round(beta_1, 4), " * mhi_2018",
+                     " + ", round(beta_2 + beta_4 * H_25, 2), " * unr_16")
+
+model_50_eq <- paste("h_under6_single_m = ", round(beta_0 + beta_3 * H_50, 2), 
+                     " + ", round(beta_1, 4), " * mhi_2018",
+                     " + ", round(beta_2 + beta_4 * H_50, 2), " * unr_16")
+
+model_75_eq <- paste("h_under6_single_m = ", round(beta_0 + beta_3 * H_75, 2), 
+                     " + ", round(beta_1, 4), " * mhi_2018",
+                     " + ", round(beta_2 + beta_4 * H_75, 2), " * unr_16")
+
+cat("Model at 25th percentile of households:\n", model_25_eq, "\n\n")
+cat("Model at 50th percentile of households:\n", model_50_eq, "\n\n")
+cat("Model at 75th percentile of households:\n", model_75_eq, "\n")
+
+```
+
+yhat = 2372.42  - 0.0415mhi_2018 - 31.84unr_16
+
+yhat = 2559.21 - 0.0415mhi_2018 - 13.45unr_16 
+
+yhat = 3084.25  - 0.0415mhi_2018  +  38.26unr_16 
+
+**2b-vi. Provide basic interpretations of either the slopes or the exponentiated slopes, *whichever is appropriate*, for one model (of your choice) in 2b-v.**
+
+The intercept (3084.25) at the 75th percentile shows the expected number of households is 3084.25 when mhi_2018 and unr_16 are zero.
+
+The slope for mhi_2018 is -0.0415 across all three equations. This showes that for every one-unit increase in median household income (in dollars), the predicted childcare costs decrease by 0.0415 units. Since the slope is negative, there is an inverse relationship between median household income and predicted childcare costs. This relationship is consistent across all models, regardless of the percentile of households.
+
+For the 75th percentile of households, the slope for unr_16 is 38.26, showing that for each one-unit increase in the unemployment rate, the predicted childcare costs increase by 38.26 units. This is a positive relationship, which is different from the negative relationship observed at the lower percentiles of households.
+
+**2c-i. Construct a relevant graph to help you explain results.**
+```{r}
+unr_16_range <- seq(min(data_childcare_cost$unr_16, na.rm = TRUE), max(data_childcare_cost$unr_16, na.rm = TRUE), length.out = 100)
+
+yhat_25 <- 2372.42 - 0.0415 * median(data_childcare_cost$mhi_2018, na.rm = TRUE) - 31.84 * unr_16_range
+yhat_50 <- 2559.21 - 0.0415 * median(data_childcare_cost$mhi_2018, na.rm = TRUE) - 13.45 * unr_16_range
+yhat_75 <- 3084.25 - 0.0415 * median(data_childcare_cost$mhi_2018, na.rm = TRUE) + 38.26 * unr_16_range
+
+plot_data <- data.frame(unr_16 = rep(unr_16_range, 3),
+                        yhat = c(yhat_25, yhat_50, yhat_75),
+                        Percentile = factor(rep(c('25th', '50th', '75th'), each = 100)))
+
+ggplot(plot_data, aes(x = unr_16, y = yhat, color = Percentile)) +
+  geom_line() +
+  labs(title = 'Predicted Childcare Costs vs. Unemployment Rate',
+       x = 'Unemployment Rate (unr_16)',
+       y = 'Predicted Childcare Costs') +
+  theme_minimal() +
+  scale_color_brewer(type = 'qual', palette = 'orange') +
+  theme(legend.title = element_blank())
+
+```
+
+**2c-ii. Write a brief paragraph conveying the results to the regional politician who ordered the study.**
+
+We have undertaken a comprehensive analysis of childcare costs for single moms with children aged 6 and below, and our results have yielded significant insights. A strong association has been found between the median household income, unemployment rates, and childcare expenses. As the median household income increases, we constantly observe a corresponding decrease in childcare expenses, indicating a negative link. The observed pattern exhibited uniformity across all categories of households, indicating that affluent areas likely to incur reduced expenses for childcare.
+
+However, the influence of unemployment rates on childcare costs showed significant differences among different household sectors. In areas with a lower concentration of households, particularly those inside the bottom 25th percentile, an increase in unemployment rates led to a notable decrease in childcare costs. In areas with a higher concentration of households (75th percentile), a contrary trend was seen, where an increase in unemployment was shown to be linked to a simultaneous rise in childcare costs. Curiously, areas with a median number of households experienced a less pronounced decrease in childcare costs during periods of rising unemployment rates.
+
+The findings suggest that the economic factors influencing childcare costs are complex and vary greatly across different regions. The research suggests that in regions with greater population density or larger urban centers, rising unemployment rates may exacerbate the financial burden of childcare. This discovery is crucial for policy design, particularly when considering targeted subsidies or support measures for childcare. These measures may necessitate a more focused strategy in areas with high unemployment rates and a larger number of households.
+
+Our study emphasizes the importance of implementing specialized and tailored approaches to address the problem of cheap childcare, particularly in relation to economic instability, such as fluctuating unemployment rates.
+
+## Dataset 3: Scooby Doo 
+
+**3. Consider the Scooby Doo dataset here: [TidyTuesday - Scooby Doo](https://github.com/rfordatascience/tidytuesday/tree/master/data/2021/2021-07-13). We will be modeling if the culprit was arrested or not (*arrested*) as the outcome and will use snack data (*snack_fred*, *snack_daphnie*, *snack_velma*, *snack_shaggy*, *snack_scooby*), if Scrappy Doo appears in the episode (*scrappy_doo*), and the number of times "zoinks" is said in the episode (*zoinks*) in predictor creation. Go ahead and pull in the data.**
+```{r}
+data_Scooby_Doo <- read_csv("Scooby_Doo_Completed.csv", show_col_types = FALSE)
+
+head(colnames(data_Scooby_Doo))
+```
+**3a-i. Let's do some data exploration. What are the possible responses in *arrested*? How many episodes fall into each possible outcome?**
+```{r}
+genre_counts3a <- table(data_Scooby_Doo$arrested)
+
+print(genre_counts3a)
+```
+
+FALSE  NULL  TRUE 
+   67   155   381 
+
+**3a-ii. Let's do some data management. Create a variable to indicate whether or not the culprit was arrested. Do not include responses that are not of interest.**
+```{r}
+data_Scooby_Doo <- dummy_columns(data_Scooby_Doo, select_columns = "arrested")
+head(colnames(data_Scooby_Doo))
+
+data_Scooby_Doo <- data_Scooby_Doo[!is.na(data_Scooby_Doo$arrested) & data_Scooby_Doo$arrested != 'NULL', ]
+
+data_Scooby_Doo$arrested_binary <- as.numeric(data_Scooby_Doo$arrested == 'TRUE')
+
+head(data_Scooby_Doo[c('arrested', 'arrested_binary')])
+```
+
+**3a-iii. Let's do some data management. Create a variable that indicates if there was a snack consumed during the episode. Your goal is to combine the snack data (*snack_fred*, *snack_daphnie*, *snack_daphnie*, *snack_shaggy*, *snack_scooby*) into a <u>single</u> yes/no variable.**
+```{r}
+Scooby_Doo3a <- data_Scooby_Doo %>%
+  dplyr::select(snack_fred, snack_daphnie, snack_daphnie, snack_shaggy, snack_scooby, snack_velma, arrested_binary) %>%
+  na.omit()
+
+Scooby_Doo3a$snack_consumed <- apply(Scooby_Doo3a[, c("snack_fred", "snack_daphnie", "snack_velma", "snack_shaggy", "snack_scooby")], 1, function(x) any(x == TRUE))
+
+Scooby_Doo3a$snack_consumed <- ifelse(Scooby_Doo3a$snack_consumed, 'Yes', 'No')
+
+head(Scooby_Doo3a)
+
+
+```
+
+**3a-iv. Let's do some data exploration. Find the overall mean number of zoinks (*zoinks*) per episode. Please note that some data management may (... or may not) be necessary.**
+```{r}
+
+non_numeric <- data_Scooby_Doo$zoinks[!grepl("^\\d+$", data_Scooby_Doo$zoinks)]
+unique(non_numeric)
+
+data_Scooby_Doo$zoinks[!grepl("^\\d+$", data_Scooby_Doo$zoinks)] <- 0
+data_Scooby_Doo$zoinks <- as.numeric(data_Scooby_Doo$zoinks)
+mean_zoinks <- mean(data_Scooby_Doo$zoinks, na.rm = TRUE)
+print(mean_zoinks)
+
+```
+
+The overall mean number of zoinks (*zoinks*) per episode is 2.15625
+
+**3a-v. Let's do some data exploration. Find the number of episodes that Scrappy Doo appears in (*scrappy_doo*). Please note that some data management may (... or may not) be necessary.**
+```{r}
+scrappy_doo_episodes <- table(data_Scooby_Doo$scrappy_doo)
+
+print(scrappy_doo_episodes)
+
+scrappy_episodes <- sum(data_Scooby_Doo$scrappy_doo == 'TRUE', na.rm = TRUE)
+
+print(scrappy_episodes)
+```
+
+The number of episodes that Scrappy Doo appears in is 99
+
+**3a-vi. Let's do some data exploration. Find the number of episodes in which a snack is consumed (i.e., the variable you created in 3a-iii).**
+```{r}
+
+data_Scooby_Doo$snack_consumed <- rowSums(data_Scooby_Doo[c("snack_fred", "snack_daphnie", "snack_velma", "snack_shaggy", "snack_scooby")] == 'TRUE', na.rm = TRUE) > 0
+
+number_of_snack_episodes <- sum(data_Scooby_Doo$snack_consumed)
+
+print(number_of_snack_episodes)
+```
+
+The number of episodes in which a snack is consumed is 108
+
+**3a-vi. Let's do some data exploration.**
+
+- **What is the mean number of *zoinks* for episodes that resulted in an arrest and, separately, episodes that did not result in an arrest?** 
+```{r}
+data_Scooby_Doo$zoinks <- as.numeric(data_Scooby_Doo$zoinks)
+
+mean_zoinks_arrest <- data_Scooby_Doo %>% 
+  filter(arrested == 'TRUE') %>%
+  summarise(mean_zoinks = mean(zoinks, na.rm = TRUE))
+
+mean_zoinks_no_arrest <- data_Scooby_Doo %>% 
+  filter(arrested == 'FALSE') %>%
+  summarise(mean_zoinks = mean(zoinks, na.rm = TRUE))
+
+print(mean_zoinks_arrest)
+print(mean_zoinks_no_arrest)
+```
+
+The mean number of *zoinks* for episodes that resulted in an arrest is 2.160105
+the mean number of *zoinks* for episodes that did not result in an arrest is 2.134328
+
+- **What number of episodes included a snack when the episode resulted in an arrest and, separately, when an episode did not result in an arrest?** 
+```{r}
+
+data_Scooby_Doo$snack_consumed <- rowSums(data_Scooby_Doo[c("snack_fred", "snack_daphnie", "snack_velma", "snack_shaggy", "snack_scooby")] == 'TRUE', na.rm = TRUE) > 0
+
+snack_with_arrest <- sum(data_Scooby_Doo$arrested == 'TRUE' & data_Scooby_Doo$snack_consumed, na.rm = TRUE)
+
+snack_no_arrest <- sum(data_Scooby_Doo$arrested == 'FALSE' & data_Scooby_Doo$snack_consumed, na.rm = TRUE)
+
+cat("Number of episodes with a snack that resulted in an arrest:", snack_with_arrest, "\n")
+cat("Number of episodes with a snack that did not result in an arrest:", snack_no_arrest, "\n")
+```
+
+Number of episodes with a snack that resulted in an arrest: 97 
+Number of episodes with a snack that did not result in an arrest: 11 
+
+- **What number of episodes included a snack when the episode resulted in an arrest and, separately, when an episode did not result in an arrest?**
+
+**Please display these means and counts in a table. Hint! Use [tablesgenerator.com](tablesgenerator.com) to create the markdown table.**
+```{r}
+
+data_Scooby_Doo$snack_consumed <- rowSums(data_Scooby_Doo[c("snack_fred", "snack_daphnie", "snack_velma", "snack_shaggy", "snack_scooby")] == 'TRUE', na.rm = TRUE) > 0
+
+snack_arrest_table <- data_Scooby_Doo %>%
+  group_by(arrested) %>%
+  summarise(snack_count = sum(snack_consumed, na.rm = TRUE)) %>%
+  pivot_wider(names_from = arrested, values_from = snack_count, names_prefix = "snack_")
+
+print(snack_arrest_table)
+
+```
+
+| snack_FALSE | snack_NULL | snack_TRUE |
+|------------:|-----------:|-----------:|
+|          11 |         33 |         97 |
+
+**3b. Consider modeling your indicator variable for *arrested* (yes/no only, from 3a-ii) as a function of the number of *zoinks*, if any *snack* was consumed, if Scrappy Doo was in the episode (*scrappy_doo*), and <u>all</u> two-way interaction terms (i.e., *zoinks:snack*, *zoinks:scrappy_doo*, and *snack:scrappy_doo*).**
+```{r}
+data_Scooby_Doo$zoinks_snack <- data_Scooby_Doo$zoinks * data_Scooby_Doo$snack_consumed
+data_Scooby_Doo$zoinks_scrappy <- data_Scooby_Doo$zoinks * data_Scooby_Doo$scrappy_doo
+data_Scooby_Doo$snack_scrappy <- data_Scooby_Doo$snack_consumed * data_Scooby_Doo$scrappy_doo
+
+m3b <- glm(arrested_binary ~ zoinks + snack_consumed + scrappy_doo + zoinks_snack + zoinks_scrappy + snack_scrappy, 
+             family = binomial(), data = data_Scooby_Doo)
+
+summary(m3b)
+```
+
+ln(π/1-π) = 1.79299 + 0.10916zoinks + 0.68325snack_consumed - 0.83226scrappy_doo - 0.20358zoinks_snack - 0.11741zoinks_scrappy + 1.10954snack_scrappy
+
+**3b-i. What method (distribution) do you think is appropriate to apply here? Provide evidence to support your idea.**
+```{r}
+
+hist(residuals(m3b), breaks = 10, main = "Histogram", xlab = "Residuals")
+
+qqnorm(residuals(m3b))
+qqline(residuals(m3b))
+
+plot(fitted(m3b), residuals(m3b), xlab = "Fitted Values", ylab = "Residuals", main = "Residuals vs Fitted")
+abline(h = 0, col = "red")
+
+vif(m3b)
+```
+
+Since snack_consumed is binary (yes/no), then a binomial logistic regression is appropriate. This method models the probability that the dependent variable equals a certain value (e.g., 1 for an arrest). It is very useful for binary outcome variables like arrested or not arrested.
+
+**3b-ii. What is the resulting model using the approach from 3b-i?** 
+
+ln(π/1-π) = 1.79299 + 0.10916zoinks + 0.68325snack_consumed - 0.83226scrappy_doo - 0.20358zoinks_snack - 0.11741zoinks_scrappy + 1.10954snack_scrappy
+
+**3c. Consider modeling your indicator variable for *arrested* (yes/no only, from 3a-ii) as a function of the number of *zoinks*, if any *snack* was consumed, and if Scrappy Doo was in the episode (*scrappy_doo*).**
+```{r}
+
+m3c <- glm(arrested_binary ~ zoinks + snack_consumed + scrappy_doo, 
+                      data = data_Scooby_Doo, 
+                      family = "binomial")
+
+summary(m3c)
+
+```
+
+ln(π/1-π) = 1.90108 + 0.01201zoinks + 0.36197snack_consumed - 0.93236scrappy_doo
+
+**3c-i. Why are you applying the same distribution as in 3c-i?**
+
+In both models m3b and m3c, the binomial distribution is applied, which is appropriate for modeling binary outcome variables. Logistic regression is designed for binary (yes/no, true/false, 1/0) outcome variables. The binomial distribution is a natural choice for such binary data as it models two possible outcomes.
+
+**3c-ii. What is the resulting model using the approach from 3b-i?** 
+
+ln(π/1-π) = 1.90108 + 0.01201zoinks + 0.36197snack_consumed - 0.93236scrappy_doo
+
+**3d. Use leave-one-out cross validation to determine if the model from 3b-ii or 3c-ii is "better" for the data. Make sure you state which model is best and why.**
+```{r}
+formula_m3b <- arrested_binary ~ zoinks + snack_consumed + scrappy_doo + 
+               zoinks_snack + zoinks_scrappy + snack_scrappy
+formula_m3c <- arrested_binary ~ zoinks + snack_consumed + scrappy_doo
+
+loocv_error_rate <- function(formula, data) {
+  error_rates <- numeric(nrow(data))
+  
+  for (i in 1:nrow(data)) {
+    train_data <- data[-i, ]
+    test_data <- data[i, , drop = FALSE]
+    fit <- glm(formula, data = train_data, family = "binomial")
+    prediction <- predict(fit, newdata = test_data, type = "response")
+    predicted_class <- ifelse(prediction > 0.5, 1, 0)
+    error_rates[i] <- as.integer(predicted_class != test_data$arrested_binary)
+  }
+  
+  mean(error_rates)
+}
+
+error_rate_m3b <- loocv_error_rate(formula_m3b, data_Scooby_Doo)
+error_rate_m3c <- loocv_error_rate(formula_m3c, data_Scooby_Doo)
+
+cat("LOOCV Error Rate for Model m3b:", error_rate_m3b, "\\n")
+cat("LOOCV Error Rate for Model m3c:", error_rate_m3c, "\\n")
+```
+
+Based on the leave-one-out cross-validation (LOOCV) results, both models m3b and m3c have the same error rate of approximately 0.1496. This shows that both models perform equally well in terms of prediction accuracy. Even with the interaction terms in m3b (like zoinks:snack, zoinks:scrappy_doo, and snack:scrappy_doo), I still prefer m3c despite its higher complexity. The p-value, at alpha level 0.05, shows that the interaction terms are not statistically significant. 
+
+**3e-i. Which, if any, are significant predictors of *arrested* for the "best model" chosen in 3d? Test at the $\alpha=0.05$ level.** 
+
+scrappy_doo is a significant predictor when tested at alpha level 0.05. 
+
+**3e-ii. Provide basic interpretations of either the slopes or the exponentiated slopes, *whichever is appropriate*, for the model stated in 3e. In your interpretations, include the confidence intervals for the slopes. Use the model chosen in 3d.**
+```{r}
+round(exp(confint(m3c)), 4)
+
+odds_ratios <- exp(coef(m3c))
+```
+
+Intercept (1.90108): The intercept represents the log odds of the dependent variable being 1 (e.g., an arrest occurring) when all predictors are zero.
+Exponentiated: e^1.90108≈6.693. This means the odds of an arrest when zoinks, snack_consumed, and scrappy_doo are zero.
+Confidence Interval:[e^4.4994, e^10.2774]≈[90.01, 29138.9]. This wide range implies high uncertainty when all predictors are zero.
+
+zoinks (0.01201):Represents the change in the log odds of the outcome for a one-unit increase in zoinks, holding other variables constant.
+Exponentiated: e^0.01201≈1.012. Each additional zoink increases the odds of an arrest by about 1.2%. Confidence Interval: [e^0.9107, e^1.1411] ≈ [2.486, 3.132]. The interval implies uncertainty about the exact effect size but confirms a positive relationship.
+
+snack_consumed (0.36197): Change in log odds of the outcome when a snack is consumed.
+Exponentiated: e^0.36197≈1.436. The presence of a snack increases the odds of an arrest by about 43.6%. Confidence Interval: [e^0.7297, e^3.0484] ≈ [2.074, 21.089]. The interval is broad, showing variability in the effect of snack consumption.
+
+scrappy_doo (-0.93236): Change in log odds of the outcome when Scrappy Doo is present.
+Exponentiated: e^−0.93236 ≈0.393. The presence of Scrappy Doo decreases the odds of an arrest by about 60.7%. Confidence Interval: [e^0.2237, e^0.6994] ≈ [1.251, 2.012]. The interval implies a consistent negative effect.
+
+**3f-i. Construct a relevant graph, related to the model chosen in 3d, to help you explain results.**
+```{r}
+intercept <- 1.90108
+coef_zoinks <- 0.01201
+coef_snack <- 0.36197
+coef_scrappy <- -0.93236
+
+zoinks_values <- seq(from = 0, to = 10, length.out = 100)
+
+prob_no_snack_no_scrappy <- plogis(intercept + coef_zoinks * zoinks_values)
+prob_snack_no_scrappy <- plogis(intercept + coef_zoinks * zoinks_values + coef_snack)
+prob_no_snack_scrappy <- plogis(intercept + coef_zoinks * zoinks_values + coef_scrappy)
+
+plot_data <- data.frame(
+  Zoinks = rep(zoinks_values, 3),
+  Probability = c(prob_no_snack_no_scrappy, prob_snack_no_scrappy, prob_no_snack_scrappy),
+  Scenario = factor(rep(c("No Snack, No Scrappy Doo", "Snack, No Scrappy Doo", "No Snack, Scrappy Doo"), each = 100))
+)
+
+ggplot(plot_data, aes(x = Zoinks, y = Probability, color = Scenario)) +
+  geom_line() +
+  labs(title = "Probability of Arrest vs. Number of Zoinks",
+       x = "Number of Zoinks",
+       y = "Probability of Arrest") +
+  scale_color_manual(values = c("blue", "green", "red")) +
+  theme_minimal()
+
+
+
+zoinks_values <- seq(from = 0, to = 10, length.out = 100) 
+
+prob_no_scrappy <- plogis(-0.88599 + 0.34074 * zoinks_values - 1.61348 * 0)
+prob_with_scrappy <- plogis(-0.88599 + 0.34074 * zoinks_values - 1.61348 * 1)
+
+plot_data <- data.frame(
+  Zoinks = c(zoinks_values, zoinks_values),
+  Probability = c(prob_no_scrappy, prob_with_scrappy),
+  ScrappyPresent = factor(rep(c("No", "Yes"), each = 100))
+)
+
+ggplot(plot_data, aes(x = Zoinks, y = Probability, color = ScrappyPresent)) +
+  geom_line() +
+  labs(title = "Probability of Snack Consumption vs. Number of Zoinks",
+       x = "Number of Zoinks",
+       y = "Probability of Snack Consumption") +
+  scale_color_manual(values = c("No" = "blue", "Yes" = "red")) +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+```
+
+**3f-ii. Write a brief paragraph conveying the results of the model chosen in 3d to the writers of Scooby Doo. Is there a recommendation you can make regarding viewers being able to predict if the culprit will be arrested?**
+
+Through my investigation, I have discovered compelling patterns that could heighten the dramatic intensity of your events. We have found that there is a positive correlation between the frequency of the exclamation "Zoinks" and the probability of the gang consuming a snack. More precisely, with every additional "Zoink," the probability of snack time occurring increases by around 43%. This could serve as a whimsical cue for viewers to anticipate scenes involving snacks. However, the data suggests a fascinating deviation when Scrappy Doo is included in the show. The individual's presence appears to have a little impact on the likelihood of consuming a snack, however this effect is not statistically significant and requires additional observation.
+
+Regarding the prediction of the villain's arrest, our current model does not provide a direct correlation. However, if the eating of snacks and the exclamation "Zoinks" are subtly integrated into the storyline as indications of the gang's imminent resolution of a mystery, it could serve as an ingenious and anticipatory narrative tool that fans may discern. The frequency of "Zoinks" being heard may indicate the gang's proximity to solving the crime, providing an enjoyable opportunity for spectators to actively participate in the mystery.
+
+The frequency of "Zoinks" and snack scenes might be seen as fun aspects that may suggest the resolution of the unfolding mystery, perhaps enhancing viewer engagement by creating anticipation
+
+
